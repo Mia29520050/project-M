@@ -1,0 +1,423 @@
+extends Node3D
+
+const PLAYER_SCENE = preload("res://scenes/player.tscn")
+const ENEMY_SCENE = preload("res://scenes/enemy.tscn")
+const BOLT_SCENE = preload("res://scenes/magic_bolt.tscn")
+
+var player: Node3D
+var camera: Camera3D
+var hud_layer: CanvasLayer
+var hp_bar: ProgressBar
+var mana_bar: ProgressBar
+var xp_bar: ProgressBar
+var level_label: Label
+var hp_label: Label
+var mana_label: Label
+var weapon_label: Label
+var shard_label: Label
+var quest_label: Label
+var enemy_label: Label
+var inventory_panel: PanelContainer
+var inventory_label: Label
+var toast_panel: PanelContainer
+var toast_label: Label
+var toast_token := 0
+var defeated_count := 0
+var quest_completed := false
+var _time := 0.0
+
+func _ready() -> void:
+	randomize()
+	_build_world()
+	_create_player()
+	_create_camera()
+	_build_hud()
+	for spawn_point in [
+		Vector3(-3.0, 0.0, 1.0),
+		Vector3(4.0, 0.0, 0.0),
+		Vector3(-5.0, 0.0, -5.0),
+		Vector3(5.0, 0.0, -6.0),
+		Vector3(0.0, 0.0, -10.0),
+		Vector3(8.0, 0.0, 3.0)
+	]:
+		_spawn_enemy(spawn_point)
+	_refresh_hud()
+	_show_toast("Welcome to Moonveil — defeat 5 Voidlings!")
+
+func _process(delta: float) -> void:
+	_time += delta
+	if is_instance_valid(camera) and is_instance_valid(player):
+		var target_position: Vector3 = player.global_position + Vector3(0.0, 17.0, 13.0)
+		camera.global_position = camera.global_position.lerp(target_position, minf(1.0, delta * 5.5))
+		camera.look_at(player.global_position + Vector3(0.0, 0.65, 0.0), Vector3.UP)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	if event.keycode == KEY_I:
+		inventory_panel.visible = not inventory_panel.visible
+		_refresh_hud()
+		get_viewport().set_input_as_handled()
+	elif event.keycode == KEY_E:
+		if player.has_method("equip_moonfire_staff"):
+			player.call("equip_moonfire_staff")
+			_refresh_hud()
+		get_viewport().set_input_as_handled()
+	elif event.keycode == KEY_ESCAPE and inventory_panel.visible:
+		inventory_panel.hide()
+		get_viewport().set_input_as_handled()
+
+func _build_world() -> void:
+	var environment_node := WorldEnvironment.new()
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color(0.085, 0.095, 0.20)
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color(0.66, 0.70, 0.92)
+	environment.ambient_light_energy = 0.72
+	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	environment_node.environment = environment
+	add_child(environment_node)
+
+	var sunlight := DirectionalLight3D.new()
+	sunlight.rotation_degrees = Vector3(-53.0, -32.0, 0.0)
+	sunlight.light_color = Color(1.0, 0.83, 0.77)
+	sunlight.light_energy = 1.1
+	sunlight.shadow_enabled = true
+	add_child(sunlight)
+
+	var ground_body := StaticBody3D.new()
+	ground_body.name = "WalkableGround"
+	ground_body.position.y = -0.2
+	add_child(ground_body)
+	var ground_collision := CollisionShape3D.new()
+	var ground_shape := BoxShape3D.new()
+	ground_shape.size = Vector3(48.0, 0.4, 48.0)
+	ground_collision.shape = ground_shape
+	ground_body.add_child(ground_collision)
+
+	var ground_mesh := MeshInstance3D.new()
+	var ground_box := BoxMesh.new()
+	ground_box.size = Vector3(48.0, 0.4, 48.0)
+	ground_mesh.mesh = ground_box
+	ground_mesh.material_override = _mat(Color(0.13, 0.26, 0.28), 0.0)
+	ground_body.add_child(ground_mesh)
+
+	# A pale stone trail guides the player from the shrine into the clearing.
+	for i in range(13):
+		var stone := MeshInstance3D.new()
+		var stone_mesh := BoxMesh.new()
+		stone_mesh.size = Vector3(2.35, 0.045, 1.18)
+		stone.mesh = stone_mesh
+		stone.material_override = _mat(Color(0.34, 0.39, 0.52) if i % 2 == 0 else Color(0.27, 0.33, 0.46), 0.08)
+		stone.position = Vector3(0.0, 0.035, 8.4 - float(i) * 1.55)
+		stone.rotation.y = sin(float(i) * 0.7) * 0.08
+		add_child(stone)
+
+	# The shrine behind the starting point.
+	_add_crystal(Vector3(0.0, 0.0, 11.0), Color(0.48, 0.78, 1.0), 1.45)
+	_add_crystal(Vector3(-1.1, 0.0, 11.35), Color(0.82, 0.56, 1.0), 0.95)
+	_add_crystal(Vector3(1.1, 0.0, 11.35), Color(0.82, 0.56, 1.0), 0.95)
+
+	var tree_spots: Array[Vector3] = [
+		Vector3(-9, 0, -8), Vector3(-11, 0, -1), Vector3(-10, 0, 6),
+		Vector3(-7, 0, 12), Vector3(8, 0, -11), Vector3(11, 0, -5),
+		Vector3(12, 0, 2), Vector3(10, 0, 10), Vector3(-14, 0, 10),
+		Vector3(15, 0, -10), Vector3(-15, 0, -10), Vector3(15, 0, 12)
+	]
+	for index in range(tree_spots.size()):
+		_add_tree(tree_spots[index], index)
+
+	for crystal_index in range(7):
+		var x: float = [-7.0, 7.0, -12.0, 12.0, -4.0, 13.0, 3.0][crystal_index]
+		var z: float = [1.0, -3.0, -8.0, 7.0, -12.0, 0.0, 13.0][crystal_index]
+		if absf(x) > 5.0 or z < -8.0:
+			_add_crystal(Vector3(x, 0.0, z), Color(0.40, 0.82, 0.94) if crystal_index % 2 == 0 else Color(0.72, 0.43, 0.98), 0.55 + float(crystal_index % 3) * 0.18)
+
+func _mat(color: Color, metallic: float = 0.0, glow: bool = false) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.metallic = metallic
+	material.roughness = 0.48
+	if glow:
+		material.emission_enabled = true
+		material.emission = color
+		material.emission_energy_multiplier = 1.6
+	return material
+
+func _add_tree(pos: Vector3, variant: int) -> void:
+	var tree := Node3D.new()
+	tree.position = pos
+	add_child(tree)
+	var trunk := MeshInstance3D.new()
+	var trunk_mesh := CylinderMesh.new()
+	trunk_mesh.top_radius = 0.13
+	trunk_mesh.bottom_radius = 0.23
+	trunk_mesh.height = 1.5
+	trunk.mesh = trunk_mesh
+	trunk.material_override = _mat(Color(0.25, 0.16, 0.23))
+	trunk.position.y = 0.72
+	tree.add_child(trunk)
+
+	var crown := MeshInstance3D.new()
+	var crown_mesh := SphereMesh.new()
+	crown_mesh.radius = 1.0 if variant % 3 == 0 else 0.82
+	crown_mesh.height = 1.8
+	crown.mesh = crown_mesh
+	var foliage: Color = [Color(0.16, 0.39, 0.38), Color(0.23, 0.31, 0.49), Color(0.35, 0.25, 0.48)][variant % 3]
+	crown.material_override = _mat(foliage, 0.03)
+	crown.position.y = 1.85
+	crown.scale = Vector3(1.0, 1.15, 0.92)
+	tree.add_child(crown)
+
+	var glow_orb := MeshInstance3D.new()
+	var orb_mesh := SphereMesh.new()
+	orb_mesh.radius = 0.09
+	orb_mesh.height = 0.18
+	glow_orb.mesh = orb_mesh
+	glow_orb.material_override = _mat(Color(0.55, 0.88, 1.0), 0.0, true)
+	glow_orb.position = Vector3(0.45, 1.5, 0.1)
+	tree.add_child(glow_orb)
+
+func _add_crystal(pos: Vector3, color: Color, height: float) -> void:
+	var crystal := MeshInstance3D.new()
+	var crystal_mesh := CylinderMesh.new()
+	crystal_mesh.top_radius = 0.025
+	crystal_mesh.bottom_radius = 0.28 * height
+	crystal_mesh.height = height
+	crystal_mesh.radial_segments = 5
+	crystal.mesh = crystal_mesh
+	crystal.material_override = _mat(color, 0.24, true)
+	crystal.position = pos + Vector3(0.0, height * 0.5, 0.0)
+	crystal.rotation_degrees.z = 7.0
+	add_child(crystal)
+	var base := MeshInstance3D.new()
+	var base_mesh := CylinderMesh.new()
+	base_mesh.top_radius = 0.42
+	base_mesh.bottom_radius = 0.48
+	base_mesh.height = 0.16
+	base.mesh = base_mesh
+	base.material_override = _mat(Color(0.17, 0.19, 0.34), 0.22)
+	base.position = pos + Vector3(0.0, 0.08, 0.0)
+	add_child(base)
+
+func _create_player() -> void:
+	player = PLAYER_SCENE.instantiate()
+	add_child(player)
+	player.global_position = Vector3(0.0, 0.0, 6.0)
+	player.stats_changed.connect(_refresh_hud)
+	player.notification_requested.connect(_show_toast)
+	player.magic_requested.connect(_on_magic_requested)
+	player.defeated.connect(_refresh_hud)
+
+func _create_camera() -> void:
+	camera = Camera3D.new()
+	camera.name = "IsometricCamera"
+	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	camera.size = 20.0
+	camera.near = 0.1
+	camera.far = 120.0
+	add_child(camera)
+	camera.global_position = player.global_position + Vector3(0.0, 17.0, 13.0)
+	camera.look_at(player.global_position + Vector3(0.0, 0.65, 0.0), Vector3.UP)
+	camera.current = true
+
+func _spawn_enemy(position_in_world: Vector3) -> void:
+	var enemy := ENEMY_SCENE.instantiate()
+	enemy.player_ref = player
+	enemy.died.connect(_on_enemy_died)
+	add_child(enemy)
+	enemy.global_position = position_in_world
+
+func _on_enemy_died(xp_reward: int, world_position: Vector3, drops_shard: bool) -> void:
+	if is_instance_valid(player):
+		player.gain_xp(xp_reward)
+		if drops_shard:
+			player.add_shard()
+	defeated_count += 1
+	_refresh_hud()
+	if defeated_count >= 5 and not quest_completed:
+		quest_completed = true
+		_show_toast("QUEST COMPLETE! Moonveil's first clearing is safe.")
+		if is_instance_valid(player):
+			player.gain_xp(35)
+	var spawn_points: Array[Vector3] = [
+		Vector3(-6, 0, -3), Vector3(6, 0, -2), Vector3(-4, 0, -10),
+		Vector3(4, 0, -11), Vector3(9, 0, 4), Vector3(-8, 0, 4)
+	]
+	var respawn_point: Vector3 = spawn_points[randi_range(0, spawn_points.size() - 1)]
+	get_tree().create_timer(2.5).timeout.connect(func() -> void:
+		if is_instance_valid(player):
+			_spawn_enemy(respawn_point)
+	)
+
+func _on_magic_requested(origin: Vector3, target: Node3D, damage: int) -> void:
+	if not is_instance_valid(target):
+		return
+	var bolt := BOLT_SCENE.instantiate()
+	add_child(bolt)
+	bolt.global_position = origin
+	bolt.configure(target, damage)
+
+func _panel_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.035, 0.045, 0.105, 0.91)
+	style.border_color = Color(0.38, 0.48, 0.75, 0.84)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 14.0
+	style.content_margin_right = 14.0
+	style.content_margin_top = 12.0
+	style.content_margin_bottom = 12.0
+	return style
+
+func _make_panel(parent: Control, size: Vector2) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _panel_style())
+	panel.custom_minimum_size = size
+	panel.size = size
+	parent.add_child(panel)
+	return panel
+
+func _make_label(parent: Node, value: String, font_size: int = 15, color: Color = Color(0.89, 0.92, 1.0)) -> Label:
+	var label := Label.new()
+	label.text = value
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", color)
+	parent.add_child(label)
+	return label
+
+func _make_bar(parent: Node, color: Color) -> ProgressBar:
+	var bar := ProgressBar.new()
+	bar.custom_minimum_size = Vector2(280, 14)
+	bar.show_percentage = false
+	var background := StyleBoxFlat.new()
+	background.bg_color = Color(0.11, 0.13, 0.22, 1.0)
+	background.set_corner_radius_all(5)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = color
+	fill.set_corner_radius_all(5)
+	bar.add_theme_stylebox_override("background", background)
+	bar.add_theme_stylebox_override("fill", fill)
+	parent.add_child(bar)
+	return bar
+
+func _build_hud() -> void:
+	hud_layer = CanvasLayer.new()
+	hud_layer.layer = 8
+	add_child(hud_layer)
+	var full := Control.new()
+	full.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	full.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud_layer.add_child(full)
+
+	var stats_panel := _make_panel(full, Vector2(326, 192))
+	stats_panel.position = Vector2(22, 22)
+	var stats_box := VBoxContainer.new()
+	stats_box.add_theme_constant_override("separation", 5)
+	stats_panel.add_child(stats_box)
+	_make_label(stats_box, "MOONVEIL  /  WAYFARER", 17, Color(0.70, 0.90, 1.0))
+	level_label = _make_label(stats_box, "LEVEL 1  ·  Apprentice", 14, Color(0.98, 0.82, 0.94))
+	hp_label = _make_label(stats_box, "HP 100 / 100", 12, Color(1.0, 0.71, 0.76))
+	hp_bar = _make_bar(stats_box, Color(0.91, 0.31, 0.48))
+	mana_label = _make_label(stats_box, "MANA 60 / 60", 12, Color(0.65, 0.86, 1.0))
+	mana_bar = _make_bar(stats_box, Color(0.29, 0.72, 0.98))
+	_make_label(stats_box, "EXPERIENCE", 11, Color(0.81, 0.81, 0.94))
+	xp_bar = _make_bar(stats_box, Color(0.69, 0.48, 1.0))
+
+	var quest_panel := _make_panel(full, Vector2(298, 128))
+	quest_panel.anchor_left = 1.0
+	quest_panel.anchor_right = 1.0
+	quest_panel.anchor_top = 0.0
+	quest_panel.anchor_bottom = 0.0
+	quest_panel.offset_left = -320.0
+	quest_panel.offset_right = -22.0
+	quest_panel.offset_top = 22.0
+	quest_panel.offset_bottom = 154.0
+	var quest_box := VBoxContainer.new()
+	quest_box.add_theme_constant_override("separation", 6)
+	quest_panel.add_child(quest_box)
+	_make_label(quest_box, "✦ FIRST LIGHT", 16, Color(0.89, 0.79, 1.0))
+	quest_label = _make_label(quest_box, "Defeat 5 Voidlings", 13)
+	enemy_label = _make_label(quest_box, "Voidlings gather in the clearing.", 11, Color(0.67, 0.75, 0.89))
+	weapon_label = _make_label(quest_box, "Weapon: Apprentice Wand", 12, Color(0.69, 0.92, 0.96))
+	shard_label = _make_label(quest_box, "Moonshards: 0 / 3", 12, Color(0.79, 0.69, 1.0))
+
+	var controls_panel := _make_panel(full, Vector2(650, 58))
+	controls_panel.anchor_left = 0.5
+	controls_panel.anchor_right = 0.5
+	controls_panel.anchor_top = 1.0
+	controls_panel.anchor_bottom = 1.0
+	controls_panel.offset_left = -325.0
+	controls_panel.offset_right = 325.0
+	controls_panel.offset_top = -76.0
+	controls_panel.offset_bottom = -16.0
+	var controls := _make_label(controls_panel, "WASD Move   ·   SPACE / Click Strike   ·   Q Moonbolt   ·   I Bag   ·   E Upgrade", 13, Color(0.79, 0.86, 1.0))
+	controls.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	controls.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+
+	toast_panel = _make_panel(full, Vector2(500, 52))
+	toast_panel.anchor_left = 0.5
+	toast_panel.anchor_right = 0.5
+	toast_panel.anchor_top = 0.0
+	toast_panel.anchor_bottom = 0.0
+	toast_panel.offset_left = -250.0
+	toast_panel.offset_right = 250.0
+	toast_panel.offset_top = 25.0
+	toast_panel.offset_bottom = 80.0
+	toast_label = _make_label(toast_panel, "", 15, Color(0.84, 0.93, 1.0))
+	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	toast_panel.hide()
+
+	inventory_panel = _make_panel(full, Vector2(420, 300))
+	inventory_panel.anchor_left = 0.5
+	inventory_panel.anchor_right = 0.5
+	inventory_panel.anchor_top = 0.5
+	inventory_panel.anchor_bottom = 0.5
+	inventory_panel.offset_left = -210.0
+	inventory_panel.offset_right = 210.0
+	inventory_panel.offset_top = -150.0
+	inventory_panel.offset_bottom = 150.0
+	var inventory_box := VBoxContainer.new()
+	inventory_box.add_theme_constant_override("separation", 10)
+	inventory_panel.add_child(inventory_box)
+	_make_label(inventory_box, "✦  ADVENTURER'S SATCHEL", 18, Color(0.78, 0.85, 1.0))
+	inventory_label = _make_label(inventory_box, "", 14)
+	inventory_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var inventory_hint := _make_label(inventory_box, "Collect 3 Moonshards, then press E to upgrade.\nPress I or ESC to close.", 12, Color(0.67, 0.80, 0.94))
+	inventory_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	inventory_panel.hide()
+
+func _refresh_hud() -> void:
+	if not is_instance_valid(player) or not is_instance_valid(hp_bar):
+		return
+	hp_bar.max_value = player.max_hp
+	hp_bar.value = player.hp
+	mana_bar.max_value = player.max_mana
+	mana_bar.value = player.mana
+	xp_bar.max_value = player.xp_to_next
+	xp_bar.value = player.xp
+	hp_label.text = "HP  %d / %d" % [player.hp, player.max_hp]
+	mana_label.text = "MANA  %d / %d" % [player.mana, player.max_mana]
+	level_label.text = "LEVEL %d  ·  %s" % [player.level, "Moonfire Adept" if player.has_moonfire_staff else "Apprentice"]
+	weapon_label.text = "Weapon: %s  (+%d power)" % [player.weapon_name, player.weapon_bonus]
+	shard_label.text = "Moonshards: %d / 3" % player.moon_shards
+	quest_label.text = "Quest complete!" if quest_completed else "Defeat 5 Voidlings  (%d/5)" % mini(defeated_count, 5)
+	enemy_label.text = "%d Voidlings in the clearing" % get_tree().get_nodes_in_group("enemies").size()
+	if inventory_panel != null:
+		inventory_label.text = "Level: %d\nHP: %d / %d\nMana: %d / %d\nXP: %d / %d\n\nWeapon: %s\nPower bonus: +%d\nMoonshards: %d / 3\n\nActive spell: Moonbolt (Q)" % [
+			player.level, player.hp, player.max_hp, player.mana, player.max_mana,
+			player.xp, player.xp_to_next, player.weapon_name, player.weapon_bonus, player.moon_shards
+		]
+
+func _show_toast(message: String) -> void:
+	if not is_instance_valid(toast_panel):
+		return
+	toast_token += 1
+	var current_token := toast_token
+	toast_label.text = message
+	toast_panel.show()
+	await get_tree().create_timer(2.7).timeout
+	if is_instance_valid(toast_panel) and current_token == toast_token:
+		toast_panel.hide()
