@@ -22,6 +22,7 @@ var enemy_label: Label
 var inventory_panel: PanelContainer
 var inventory_label: Label
 var pause_panel: PanelContainer
+var death_panel: PanelContainer
 var toast_panel: PanelContainer
 var toast_label: Label
 var toast_token := 0
@@ -31,6 +32,8 @@ var _time := 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Player uses the default physics priority (0); run this controller after it.
+	process_priority = 1
 	randomize()
 	_build_world()
 	_create_player()
@@ -52,11 +55,15 @@ func _process(delta: float) -> void:
 	if get_tree().paused:
 		return
 	_time += delta
+	_refresh_dodge_hud()
+
+func _physics_process(_delta: float) -> void:
+	if get_tree().paused:
+		return
 	if is_instance_valid(camera) and is_instance_valid(player):
-		# Keep the player firmly framed rather than letting the camera trail behind.
+		# Controller priority 1 runs after the Player's default priority 0 physics tick.
 		camera.global_position = player.global_position + Vector3(0.0, 17.0, 13.0)
 		camera.look_at(player.global_position + Vector3(0.0, 0.75, 0.0), Vector3.UP)
-	_refresh_dodge_hud()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.echo:
@@ -266,6 +273,7 @@ func _create_player() -> void:
 	player.notification_requested.connect(_show_toast)
 	player.magic_requested.connect(_on_magic_requested)
 	player.defeated.connect(_refresh_hud)
+	player.defeated.connect(_show_death_panel)
 
 func _create_camera() -> void:
 	camera = Camera3D.new()
@@ -300,6 +308,10 @@ func _on_enemy_died(xp_reward: int, world_position: Vector3, drops_shard: bool) 
 		_show_toast("QUEST COMPLETE! Moonveil's first clearing is safe.")
 		if is_instance_valid(player):
 			player.gain_xp(35)
+			if not player.has_moonfire_staff and player.moon_shards < 3:
+				var bonus_shards: int = 3 - player.moon_shards
+				player.add_shard(bonus_shards)
+				_show_toast("Quest reward: %d Moonshards! Return to the Moon Shrine to awaken your staff." % bonus_shards)
 	var spawn_points: Array[Vector3] = [
 		Vector3(-6, 0, -3), Vector3(6, 0, -2), Vector3(-4, 0, -10),
 		Vector3(4, 0, -11), Vector3(9, 0, 4), Vector3(-8, 0, 4)
@@ -423,8 +435,8 @@ func _build_hud() -> void:
 	toast_panel.anchor_right = 0.5
 	toast_panel.anchor_top = 0.0
 	toast_panel.anchor_bottom = 0.0
-	toast_panel.offset_left = -310.0
-	toast_panel.offset_right = 310.0
+	toast_panel.offset_left = -260.0
+	toast_panel.offset_right = 260.0
 	toast_panel.offset_top = 25.0
 	toast_panel.offset_bottom = 84.0
 	toast_label = _make_label(toast_panel, "", 15, Color(0.84, 0.93, 1.0))
@@ -471,6 +483,35 @@ func _build_hud() -> void:
 	resume_button.pressed.connect(_resume_game)
 	pause_box.add_child(resume_button)
 	pause_panel.hide()
+
+	# A dedicated death banner stays visible for the full shrine-return delay,
+	# instead of relying only on the short-lived toast notification.
+	death_panel = _make_panel(full, Vector2(470, 136))
+	death_panel.anchor_left = 0.5
+	death_panel.anchor_right = 0.5
+	death_panel.anchor_top = 0.5
+	death_panel.anchor_bottom = 0.5
+	death_panel.offset_left = -235.0
+	death_panel.offset_right = 235.0
+	death_panel.offset_top = -68.0
+	death_panel.offset_bottom = 68.0
+	var death_style := _panel_style()
+	death_style.bg_color = Color(0.12, 0.025, 0.07, 0.97)
+	death_style.border_color = Color(0.95, 0.28, 0.48, 0.96)
+	death_panel.add_theme_stylebox_override("panel", death_style)
+	var death_box := VBoxContainer.new()
+	death_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	death_box.add_theme_constant_override("separation", 9)
+	death_panel.add_child(death_box)
+	var death_title := _make_label(death_box, "YOU HAVE FALLEN", 25, Color(1.0, 0.47, 0.61))
+	death_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var death_subtitle := _make_label(death_box, "The clearing is being restored…", 14, Color(0.94, 0.86, 0.91))
+	death_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	death_panel.hide()
+
+func _show_death_panel() -> void:
+	if is_instance_valid(death_panel):
+		death_panel.show()
 
 func _refresh_dodge_hud() -> void:
 	if not is_instance_valid(player) or not is_instance_valid(dodge_label):

@@ -3,6 +3,9 @@ extends CharacterBody3D
 signal died(xp_reward: int, world_position: Vector3, drops_shard: bool)
 const GRAVITY := 22.0
 const FALL_RESET_Y := -5.0
+const ATTACK_RANGE := 1.35
+const ATTACK_WINDUP_DURATION := 0.45
+const ATTACK_COOLDOWN := 1.25
 var player_ref: Node3D
 var spawn_position: Vector3 = Vector3.ZERO
 var max_hp := 42
@@ -12,10 +15,14 @@ var touch_damage := 8
 var xp_reward := 20
 var _attack_timer := 0.0
 var _flash_timer := 0.0
+var _windup_timer := 0.0
+var _is_winding_up := false
 var _dead := false
 var _body_material: StandardMaterial3D
 var _visual_root: Node3D
 var _name_label: Label3D
+var _warning_label: Label3D
+var _warning_ring: MeshInstance3D
 var _time := 0.0
 
 func _ready() -> void:
@@ -82,6 +89,39 @@ func _ready() -> void:
 	_visual_root.add_child(label)
 	_name_label = label
 
+	# Clear wind-up cues: an orange warning symbol above the Voidling and a ring on the ground.
+	_warning_label = Label3D.new()
+	_warning_label.name = "AttackWarningLabel"
+	_warning_label.text = "!"
+	_warning_label.font_size = 72
+	_warning_label.pixel_size = 0.009
+	_warning_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_warning_label.modulate = Color(1.0, 0.30, 0.10)
+	_warning_label.position = Vector3(0.0, 2.65, 0.0)
+	_warning_label.visible = false
+	_visual_root.add_child(_warning_label)
+
+	_warning_ring = MeshInstance3D.new()
+	_warning_ring.name = "AttackTelegraphRing"
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.58
+	ring_mesh.outer_radius = 0.76
+	ring_mesh.rings = 8
+	ring_mesh.ring_segments = 32
+	_warning_ring.mesh = ring_mesh
+	var ring_material := StandardMaterial3D.new()
+	ring_material.albedo_color = Color(1.0, 0.18, 0.06, 0.9)
+	ring_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring_material.emission_enabled = true
+	ring_material.emission = Color(1.0, 0.12, 0.025)
+	ring_material.emission_energy_multiplier = 1.5
+	_warning_ring.material_override = ring_material
+	_warning_ring.position.y = 0.075
+	_warning_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_warning_ring.visible = false
+	add_child(_warning_ring)
+
 func _physics_process(delta: float) -> void:
 	if _dead: return
 	if global_position.y < FALL_RESET_Y:
@@ -102,7 +142,31 @@ func _physics_process(delta: float) -> void:
 	var to_player := player_ref.global_position - global_position
 	to_player.y = 0.0
 	var distance := to_player.length()
-	if distance > 1.35:
+	if _is_winding_up:
+		# Commit to a short, readable wind-up before the hit can happen.
+		# Tint the body as well so the cue remains legible if the ring is partly occluded.
+		_body_material.albedo_color = Color(1.0, 0.32, 0.09)
+		_windup_timer = maxf(0.0, _windup_timer - delta)
+		var progress := 1.0 - (_windup_timer / ATTACK_WINDUP_DURATION)
+		if is_instance_valid(_warning_ring):
+			_warning_ring.scale = Vector3.ONE * (0.72 + 0.28 * progress)
+		if is_instance_valid(_warning_label):
+			_warning_label.scale = Vector3.ONE * (0.85 + 0.45 * progress)
+		velocity.x = move_toward(velocity.x, 0.0, 12.0 * delta)
+		velocity.z = move_toward(velocity.z, 0.0, 12.0 * delta)
+		if _windup_timer <= 0.0:
+			_is_winding_up = false
+			_attack_timer = ATTACK_COOLDOWN
+			if is_instance_valid(_warning_ring):
+				_warning_ring.hide()
+				_warning_ring.scale = Vector3.ONE
+			if is_instance_valid(_warning_label):
+				_warning_label.hide()
+				_warning_label.scale = Vector3.ONE
+			# The attack misses if the player leaves melee range during the warning.
+			if distance <= ATTACK_RANGE and player_ref.has_method("take_damage"):
+				player_ref.call("take_damage", touch_damage)
+	elif distance > ATTACK_RANGE:
 		var direction := to_player.normalized()
 		velocity.x = direction.x * move_speed
 		velocity.z = direction.z * move_speed
@@ -111,8 +175,14 @@ func _physics_process(delta: float) -> void:
 		velocity.x = move_toward(velocity.x, 0.0, 12.0 * delta)
 		velocity.z = move_toward(velocity.z, 0.0, 12.0 * delta)
 		if _attack_timer <= 0.0 and player_ref.has_method("take_damage"):
-			_attack_timer = 1.25
-			player_ref.call("take_damage", touch_damage)
+			_is_winding_up = true
+			_windup_timer = ATTACK_WINDUP_DURATION
+			if is_instance_valid(_warning_ring):
+				_warning_ring.show()
+				_warning_ring.scale = Vector3.ONE * 0.72
+			if is_instance_valid(_warning_label):
+				_warning_label.show()
+				_warning_label.scale = Vector3.ONE * 0.85
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 	else:
@@ -134,7 +204,13 @@ func _spawn_damage_number(amount: int) -> void:
 		scene_root = get_parent()
 	if scene_root == null:
 		return
+	var active_popups := scene_root.get_tree().get_nodes_in_group("damage_popups")
+	if active_popups.size() >= 24:
+		# Popups are added as scene-root children in creation order; remove the oldest first.
+		var oldest_popup: Node = active_popups[0]
+		oldest_popup.free()
 	scene_root.add_child(popup)
+	popup.add_to_group("damage_popups")
 	popup.global_position = global_position + Vector3(randf_range(-0.22, 0.22), 1.55, randf_range(-0.12, 0.12))
 	var tween := popup.create_tween()
 	tween.tween_property(popup, "global_position", popup.global_position + Vector3(0.0, 1.05, 0.0), 0.72).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)

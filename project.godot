@@ -11,8 +11,12 @@ config_version=5
 [application]
 
 config/name="Moonveil - Anime Fantasy RPG"
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/refuge.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[autoload]
+
+MoonveilMeta="*res://scripts/moonveil_meta.gd"
 
 [display]
 

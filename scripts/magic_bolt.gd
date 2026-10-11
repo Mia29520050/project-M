@@ -3,6 +3,8 @@ extends Node3D
 var target: Node3D
 var damage := 24
 var travel_speed := 15.5
+const RETARGET_RADIUS := 8.0
+var _last_target_position := Vector3.ZERO
 var _visual: MeshInstance3D
 
 func _ready() -> void:
@@ -47,17 +49,47 @@ func _ready() -> void:
 func configure(target_node: Node3D, hit_damage: int) -> void:
 	target = target_node
 	damage = hit_damage
+	if is_instance_valid(target_node):
+		_last_target_position = target_node.global_position + Vector3(0.0, 0.85, 0.0)
 
 func _process(delta: float) -> void:
 	rotation.z += delta * 5.0
-	if not is_instance_valid(target):
-		queue_free()
-		return
-	var destination := target.global_position + Vector3(0.0, 0.85, 0.0)
-	var to_target := destination - global_position
+	if is_instance_valid(target) and not target.is_queued_for_deletion():
+		_last_target_position = target.global_position + Vector3(0.0, 0.85, 0.0)
+	else:
+		target = _find_retarget()
+		if is_instance_valid(target):
+			_last_target_position = target.global_position + Vector3(0.0, 0.85, 0.0)
+		else:
+			# No replacement in range: finish travelling toward the previous target point.
+			_move_toward_last_target(delta)
+			return
+
+	var to_target := _last_target_position - global_position
 	if to_target.length() <= travel_speed * delta + 0.30:
-		if target.has_method("take_damage"):
+		if is_instance_valid(target) and not target.is_queued_for_deletion() and target.has_method("take_damage"):
 			target.call("take_damage", damage)
 		queue_free()
 		return
 	global_position += to_target.normalized() * travel_speed * delta
+
+func _find_retarget() -> Node3D:
+	var nearest_target: Node3D = null
+	var nearest_distance := RETARGET_RADIUS
+	for candidate in get_tree().get_nodes_in_group("enemies"):
+		if not is_instance_valid(candidate) or candidate.is_queued_for_deletion():
+			continue
+		if not candidate.has_method("take_damage"):
+			continue
+		var distance: float = global_position.distance_to(candidate.global_position)
+		if distance <= nearest_distance:
+			nearest_distance = distance
+			nearest_target = candidate as Node3D
+	return nearest_target
+
+func _move_toward_last_target(delta: float) -> void:
+	var to_last_target: Vector3 = _last_target_position - global_position
+	if to_last_target.length() <= travel_speed * delta + 0.30:
+		queue_free()
+		return
+	global_position += to_last_target.normalized() * travel_speed * delta

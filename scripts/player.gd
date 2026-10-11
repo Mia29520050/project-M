@@ -35,6 +35,7 @@ var dodge_charges := 2
 var _dodge_recharge_timer := 0.0
 var _invulnerability_timer := 0.0
 var _dodge_direction := Vector3.ZERO
+var _dodge_collision_exceptions: Array[PhysicsBody3D] = []
 var _facing_yaw := 0.0
 var controls_locked := false
 var _staff_instance: MeshInstance3D
@@ -143,6 +144,7 @@ func _physics_process(delta: float) -> void:
 		global_position = Vector3(0.0, 0.0, 6.0)
 		velocity = Vector3.ZERO
 		_dodge_timer = 0.0
+		_end_dodge_collision_phase()
 		return
 	_time += delta
 	_attack_timer = maxf(0.0, _attack_timer - delta)
@@ -158,6 +160,8 @@ func _physics_process(delta: float) -> void:
 	else:
 		_dodge_recharge_timer = 0.0
 	if _defeated:
+		_dodge_timer = 0.0
+		_end_dodge_collision_phase()
 		velocity.x = move_toward(velocity.x, 0.0, WALK_SPEED * delta * 3.0)
 		velocity.z = move_toward(velocity.z, 0.0, WALK_SPEED * delta * 3.0)
 		return
@@ -208,6 +212,8 @@ func _physics_process(delta: float) -> void:
 		_attack_anim = maxf(0.0, _attack_anim - delta)
 	_visual_root.rotation.y = _facing_yaw + attack_sway
 	move_and_slide()
+	if _dodge_timer <= 0.0:
+		_end_dodge_collision_phase()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _defeated or controls_locked:
@@ -236,6 +242,7 @@ func _start_dodge() -> void:
 		_dodge_direction = input_direction.normalized()
 	else:
 		_dodge_direction = Vector3(sin(_facing_yaw), 0.0, cos(_facing_yaw)).normalized()
+	_begin_dodge_collision_phase()
 	_dodge_timer = DODGE_DURATION
 	dodge_charges -= 1
 	if _dodge_recharge_timer <= 0.0:
@@ -243,6 +250,21 @@ func _start_dodge() -> void:
 	_invulnerability_timer = DODGE_DURATION
 	stats_changed.emit()
 	notification_requested.emit("Dodge! %d/%d charges left." % [dodge_charges, max_dodge_charges])
+
+func _begin_dodge_collision_phase() -> void:
+	# Temporarily ignore enemy bodies so dodge can escape a surround; terrain collision stays intact.
+	_end_dodge_collision_phase()
+	for item in get_tree().get_nodes_in_group("enemies"):
+		var enemy_body := item as PhysicsBody3D
+		if is_instance_valid(enemy_body):
+			add_collision_exception_with(enemy_body)
+			_dodge_collision_exceptions.append(enemy_body)
+
+func _end_dodge_collision_phase() -> void:
+	for enemy_body in _dodge_collision_exceptions:
+		if is_instance_valid(enemy_body):
+			remove_collision_exception_with(enemy_body)
+	_dodge_collision_exceptions.clear()
 
 func perform_attack() -> void:
 	if _attack_timer > 0.0 or _defeated: return
@@ -316,16 +338,13 @@ func take_damage(amount: int) -> void:
 	if hp <= 0:
 		_defeated = true
 		defeated.emit()
-		notification_requested.emit("You have fallen. Returning to the Moonveil shrine...")
-		await get_tree().create_timer(2.0, false).timeout
+		# The death panel is the only death message; end the run after a short delay.
+		var game_tree := get_tree()
+		await game_tree.create_timer(2.0, false).timeout
 		if not is_inside_tree(): return
-		hp = max_hp
-		mana = max_mana
-		global_position = Vector3(0, 0, 6)
-		velocity = Vector3.ZERO
-		_defeated = false
-		notification_requested.emit("The shrine has restored you.")
-		stats_changed.emit()
+		var scene_change_error: Error = game_tree.change_scene_to_file("res://scenes/refuge.tscn")
+		if scene_change_error != OK:
+			push_error("Moonveil failed to return to the Refuge after death (error %d)." % scene_change_error)
 
 func add_shard(amount: int = 1) -> void:
 	moon_shards += amount
