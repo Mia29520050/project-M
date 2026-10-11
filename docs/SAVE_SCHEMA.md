@@ -53,7 +53,7 @@ Each profile owns character-specific progression, attributes, skills, equipment 
 - Writes use a temporary file followed by an atomic rename in the same directory.
 - Unsupported versions, invalid JSON and character ID mismatches are left untouched on disk; defaults are used only in memory and a warning is emitted.
 - IDs, currencies, quantities and core numeric progression values are validated and normalized on load.
-- The Refuge's Wayfarers' Fire now provides a character-selection screen and persists the active character ID. The live Player's run level/XP, HP, current equipment upgrades, potions, and Moonshards are still prototype-scoped; bank/stash UI and an in-game economy are not yet implemented.
+- The Refuge's Wayfarers' Fire now provides clickable in-world characters with a small contextual confirmation strip and persists the active character ID. The live Player's run level/XP, HP, current equipment upgrades, potions, and Moonshards are still prototype-scoped; bank/stash UI and an in-game economy are not yet implemented.
 - No migration is applied to `moonveil_meta.json`; its existing version-1 content remains separate and compatible.
 
 ## Next integration steps

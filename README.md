@@ -13,9 +13,9 @@ flatpak run org.godotengine.Godot --path ~/Projects/AnimeFantasyRPG
 
 ### Refuge
 - WASD — Move around the safe hub.
-- Go to the **Wayfarers' Fire** and press E — open the character-selection panel.
-- Click a character once to select; double-click to confirm immediately, or click once and press **Confirm Wayfarer**.
-- Esc or Cancel — close character selection without changing the active hero.
+- The Mage and Astra Vale are physically present beside the **Wayfarers' Fire**. Click the character in the world, or approach and press E.
+- A single click opens a small contextual detail strip while keeping the Refuge visible. Double-click the same character to switch immediately, or click once and press **Play as this Hero**.
+- Esc or Cancel — close the detail strip without changing the active hero.
 - Go to the **Moon Shrine** and press E — enter Whispering Woods as the selected character.
 
 ### During a run — shared controls
@@ -53,7 +53,7 @@ This is a prototype, not a finished commercial-quality game. Character shapes an
 - scenes/sword_duelist.tscn and scripts/sword_duelist.gd — Astra Vale, melee combo, Crescent Lunge, and duel-specific visuals.
 - scenes/enemy.tscn and scripts/enemy.gd — Voidling AI, telegraphed attacks, contact damage, and loot.
 - scenes/magic_bolt.tscn and scripts/magic_bolt.gd — homing Moonbolt.
-- scripts/refuge_controller.gd — Refuge world, Wayfarers' Fire, character-selection panel, pause label, and run transition.
+- scripts/refuge_controller.gd — Refuge world, clickable in-world wayfarers, contextual selection strip, pause label, and run transition.
 - scripts/game_controller.gd — run world, quest, camera, combat UI, pause/death panels, and enemy spawning.
 - scripts/moonveil_meta.gd — persistent long-term progression flags, permanent upgrades/currency and unlocked regions.
 - scripts/moonveil_profiles.gd — versioned account save, active character selection, character profiles, and shared bank/stash data (live run stats and bank/stash UI are still separate follow-up work).
