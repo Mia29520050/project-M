@@ -7,13 +7,18 @@
 - [x] HP, mana, XP, leveling and basic quest tracker
 - [x] Loot shards and one weapon upgrade
 - [x] Inventory panel and low-HP shrine revive
+- [x] Pause menu and inventory both pause gameplay; closing either resumes the world
+- [x] Named Input Map actions for movement, strike, dodge, Moonbolt, inventory, interaction and pause
+- [x] Two rechargeable dodge charges with visible count/cooldown text
+- [x] Explicit Moonbolt auto-target and homing behavior in HUD/inventory help
+- [x] Floating damage numbers, enemy remaining-HP labels and clear Moonbolt feedback
 - [ ] In-engine manual playtest and tuning after first open
 
 ## Milestone 1 — RPG foundations
 - [ ] Data-driven items, stats and equipment slots (weapon, head, body, accessory)
 - [ ] Save/load profile with versioned data
-- [ ] Settings, pause menu, key rebinding and controller support
-- [ ] Damage numbers, hit feedback, enemy health bars and cooldown UI
+- [ ] Settings, key rebinding and controller support
+- [ ] Dodge cooldown UI, more impact feedback and tuning
 - [ ] Basic dialogue and NPC interaction
 
 ## Milestone 2 — A first real quest

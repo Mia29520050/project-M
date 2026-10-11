@@ -13,12 +13,15 @@ var xp_bar: ProgressBar
 var level_label: Label
 var hp_label: Label
 var mana_label: Label
+var dodge_label: Label
+var _inventory_paused := false
 var weapon_label: Label
 var shard_label: Label
 var quest_label: Label
 var enemy_label: Label
 var inventory_panel: PanelContainer
 var inventory_label: Label
+var pause_panel: PanelContainer
 var toast_panel: PanelContainer
 var toast_label: Label
 var toast_token := 0
@@ -27,6 +30,7 @@ var quest_completed := false
 var _time := 0.0
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	randomize()
 	_build_world()
 	_create_player()
@@ -45,27 +49,71 @@ func _ready() -> void:
 	_show_toast("Welcome to Moonveil — defeat 5 Voidlings!")
 
 func _process(delta: float) -> void:
+	if get_tree().paused:
+		return
 	_time += delta
 	if is_instance_valid(camera) and is_instance_valid(player):
-		var target_position: Vector3 = player.global_position + Vector3(0.0, 17.0, 13.0)
-		camera.global_position = camera.global_position.lerp(target_position, minf(1.0, delta * 5.5))
-		camera.look_at(player.global_position + Vector3(0.0, 0.65, 0.0), Vector3.UP)
+		# Keep the player firmly framed rather than letting the camera trail behind.
+		camera.global_position = player.global_position + Vector3(0.0, 17.0, 13.0)
+		camera.look_at(player.global_position + Vector3(0.0, 0.75, 0.0), Vector3.UP)
+	_refresh_dodge_hud()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not (event is InputEventKey and event.pressed and not event.echo):
+	if event is InputEventKey and event.echo:
 		return
-	if event.keycode == KEY_I:
-		inventory_panel.visible = not inventory_panel.visible
+
+	# ESC always exits the inventory first; otherwise it toggles the pause menu.
+	if event.is_action_pressed("pause"):
+		if _inventory_paused:
+			_inventory_paused = false
+			inventory_panel.hide()
+			_set_paused(false)
+		elif get_tree().paused:
+			_set_paused(false)
+		else:
+			_set_paused(true)
+		get_viewport().set_input_as_handled()
+		return
+
+	if event.is_action_pressed("inventory"):
+		if _inventory_paused:
+			_inventory_paused = false
+			inventory_panel.hide()
+			_set_paused(false)
+		elif not get_tree().paused:
+			_inventory_paused = true
+			inventory_panel.show()
+			_set_paused(true)
 		_refresh_hud()
 		get_viewport().set_input_as_handled()
-	elif event.keycode == KEY_E:
-		if player.has_method("equip_moonfire_staff"):
-			player.call("equip_moonfire_staff")
-			_refresh_hud()
+		return
+
+	if get_tree().paused:
+		return
+	if event.is_action_pressed("interact"):
+		if not is_instance_valid(player):
+			return
+		if player.has_moonfire_staff:
+			player.equip_moonfire_staff()
+		elif player.moon_shards < 3:
+			_show_toast("Collect 3 Moonshards before awakening your staff.")
+		elif player.global_position.distance_to(Vector3(0.0, 0.0, 11.0)) > 3.5:
+			_show_toast("Return to the glowing Moon Shrine to enhance your staff.")
+		else:
+			player.equip_moonfire_staff()
+		_refresh_hud()
 		get_viewport().set_input_as_handled()
-	elif event.keycode == KEY_ESCAPE and inventory_panel.visible:
-		inventory_panel.hide()
-		get_viewport().set_input_as_handled()
+
+func _set_paused(should_pause: bool) -> void:
+	get_tree().paused = should_pause
+	if is_instance_valid(pause_panel):
+		pause_panel.visible = should_pause and not _inventory_paused
+	if is_instance_valid(player):
+		player.controls_locked = should_pause or (is_instance_valid(inventory_panel) and inventory_panel.visible)
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+
+func _resume_game() -> void:
+	_set_paused(false)
 
 func _build_world() -> void:
 	var environment_node := WorldEnvironment.new()
@@ -118,6 +166,14 @@ func _build_world() -> void:
 	_add_crystal(Vector3(0.0, 0.0, 11.0), Color(0.48, 0.78, 1.0), 1.45)
 	_add_crystal(Vector3(-1.1, 0.0, 11.35), Color(0.82, 0.56, 1.0), 0.95)
 	_add_crystal(Vector3(1.1, 0.0, 11.35), Color(0.82, 0.56, 1.0), 0.95)
+	var shrine_label := Label3D.new()
+	shrine_label.text = "MOON SHRINE\nE  ·  ENHANCE STAFF"
+	shrine_label.font_size = 32
+	shrine_label.pixel_size = 0.006
+	shrine_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	shrine_label.modulate = Color(0.72, 0.88, 1.0)
+	shrine_label.position = Vector3(0.0, 2.5, 11.0)
+	add_child(shrine_label)
 
 	var tree_spots: Array[Vector3] = [
 		Vector3(-9, 0, -8), Vector3(-11, 0, -1), Vector3(-10, 0, 6),
@@ -203,6 +259,7 @@ func _add_crystal(pos: Vector3, color: Color, height: float) -> void:
 
 func _create_player() -> void:
 	player = PLAYER_SCENE.instantiate()
+	player.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(player)
 	player.global_position = Vector3(0.0, 0.0, 6.0)
 	player.stats_changed.connect(_refresh_hud)
@@ -224,10 +281,12 @@ func _create_camera() -> void:
 
 func _spawn_enemy(position_in_world: Vector3) -> void:
 	var enemy := ENEMY_SCENE.instantiate()
+	enemy.process_mode = Node.PROCESS_MODE_PAUSABLE
 	enemy.player_ref = player
 	enemy.died.connect(_on_enemy_died)
+	# Set local position before _ready() so the enemy records the correct respawn point.
+	enemy.position = position_in_world
 	add_child(enemy)
-	enemy.global_position = position_in_world
 
 func _on_enemy_died(xp_reward: int, world_position: Vector3, drops_shard: bool) -> void:
 	if is_instance_valid(player):
@@ -246,7 +305,7 @@ func _on_enemy_died(xp_reward: int, world_position: Vector3, drops_shard: bool) 
 		Vector3(4, 0, -11), Vector3(9, 0, 4), Vector3(-8, 0, 4)
 	]
 	var respawn_point: Vector3 = spawn_points[randi_range(0, spawn_points.size() - 1)]
-	get_tree().create_timer(2.5).timeout.connect(func() -> void:
+	get_tree().create_timer(2.5, false).timeout.connect(func() -> void:
 		if is_instance_valid(player):
 			_spawn_enemy(respawn_point)
 	)
@@ -255,6 +314,7 @@ func _on_magic_requested(origin: Vector3, target: Node3D, damage: int) -> void:
 	if not is_instance_valid(target):
 		return
 	var bolt := BOLT_SCENE.instantiate()
+	bolt.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(bolt)
 	bolt.global_position = origin
 	bolt.configure(target, damage)
@@ -304,6 +364,7 @@ func _make_bar(parent: Node, color: Color) -> ProgressBar:
 
 func _build_hud() -> void:
 	hud_layer = CanvasLayer.new()
+	hud_layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	hud_layer.layer = 8
 	add_child(hud_layer)
 	var full := Control.new()
@@ -311,7 +372,7 @@ func _build_hud() -> void:
 	full.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_layer.add_child(full)
 
-	var stats_panel := _make_panel(full, Vector2(326, 192))
+	var stats_panel := _make_panel(full, Vector2(326, 216))
 	stats_panel.position = Vector2(22, 22)
 	var stats_box := VBoxContainer.new()
 	stats_box.add_theme_constant_override("separation", 5)
@@ -324,13 +385,14 @@ func _build_hud() -> void:
 	mana_bar = _make_bar(stats_box, Color(0.29, 0.72, 0.98))
 	_make_label(stats_box, "EXPERIENCE", 11, Color(0.81, 0.81, 0.94))
 	xp_bar = _make_bar(stats_box, Color(0.69, 0.48, 1.0))
+	dodge_label = _make_label(stats_box, "DODGE  2 / 2  ·  READY", 12, Color(0.78, 0.88, 1.0))
 
-	var quest_panel := _make_panel(full, Vector2(298, 128))
+	var quest_panel := _make_panel(full, Vector2(340, 128))
 	quest_panel.anchor_left = 1.0
 	quest_panel.anchor_right = 1.0
 	quest_panel.anchor_top = 0.0
 	quest_panel.anchor_bottom = 0.0
-	quest_panel.offset_left = -320.0
+	quest_panel.offset_left = -362.0
 	quest_panel.offset_right = -22.0
 	quest_panel.offset_top = 22.0
 	quest_panel.offset_bottom = 154.0
@@ -343,16 +405,16 @@ func _build_hud() -> void:
 	weapon_label = _make_label(quest_box, "Weapon: Apprentice Wand", 12, Color(0.69, 0.92, 0.96))
 	shard_label = _make_label(quest_box, "Moonshards: 0 / 3", 12, Color(0.79, 0.69, 1.0))
 
-	var controls_panel := _make_panel(full, Vector2(650, 58))
+	var controls_panel := _make_panel(full, Vector2(940, 72))
 	controls_panel.anchor_left = 0.5
 	controls_panel.anchor_right = 0.5
 	controls_panel.anchor_top = 1.0
 	controls_panel.anchor_bottom = 1.0
-	controls_panel.offset_left = -325.0
-	controls_panel.offset_right = 325.0
-	controls_panel.offset_top = -76.0
-	controls_panel.offset_bottom = -16.0
-	var controls := _make_label(controls_panel, "WASD Move   ·   SPACE / Click Strike   ·   Q Moonbolt   ·   I Bag   ·   E Upgrade", 13, Color(0.79, 0.86, 1.0))
+	controls_panel.offset_left = -470.0
+	controls_panel.offset_right = 470.0
+	controls_panel.offset_top = -90.0
+	controls_panel.offset_bottom = -14.0
+	var controls := _make_label(controls_panel, "WASD Move  ·  Mouse 1 Attack  ·  SPACE Dodge (charges shown top-left)  ·  Q Moonbolt (auto-lock nearest Voidling within 18m; projectile homes in)  ·  I Inventory  ·  E Shrine  ·  ESC Pause", 12, Color(0.79, 0.86, 1.0))
 	controls.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	controls.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
@@ -361,10 +423,10 @@ func _build_hud() -> void:
 	toast_panel.anchor_right = 0.5
 	toast_panel.anchor_top = 0.0
 	toast_panel.anchor_bottom = 0.0
-	toast_panel.offset_left = -250.0
-	toast_panel.offset_right = 250.0
+	toast_panel.offset_left = -310.0
+	toast_panel.offset_right = 310.0
 	toast_panel.offset_top = 25.0
-	toast_panel.offset_bottom = 80.0
+	toast_panel.offset_bottom = 84.0
 	toast_label = _make_label(toast_panel, "", 15, Color(0.84, 0.93, 1.0))
 	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	toast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -385,9 +447,38 @@ func _build_hud() -> void:
 	_make_label(inventory_box, "✦  ADVENTURER'S SATCHEL", 18, Color(0.78, 0.85, 1.0))
 	inventory_label = _make_label(inventory_box, "", 14)
 	inventory_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var inventory_hint := _make_label(inventory_box, "Collect 3 Moonshards, then press E to upgrade.\nPress I or ESC to close.", 12, Color(0.67, 0.80, 0.94))
+	var inventory_hint := _make_label(inventory_box, "Q: Moonbolt automatically locks onto the nearest Voidling within 18m; the projectile chases that target (24 base damage, 15 Mana).\nSPACE: spend one of 2 dodge charges; charges recharge over time.\nE: awaken the staff at the Moon Shrine after collecting 3 Moonshards.\nI or ESC closes this satchel. The entire game is paused while it is open.", 12, Color(0.67, 0.80, 0.94))
 	inventory_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	inventory_panel.hide()
+
+	pause_panel = _make_panel(full, Vector2(390, 260))
+	pause_panel.anchor_left = 0.5
+	pause_panel.anchor_right = 0.5
+	pause_panel.anchor_top = 0.5
+	pause_panel.anchor_bottom = 0.5
+	pause_panel.offset_left = -195.0
+	pause_panel.offset_right = 195.0
+	pause_panel.offset_top = -130.0
+	pause_panel.offset_bottom = 130.0
+	var pause_box := VBoxContainer.new()
+	pause_box.add_theme_constant_override("separation", 12)
+	pause_panel.add_child(pause_box)
+	_make_label(pause_box, "PAUSED  /  MOONVEIL", 19, Color(0.78, 0.86, 1.0))
+	_make_label(pause_box, "The world is paused.\nWASD move · Mouse 1 attack · Space dodge", 13, Color(0.72, 0.80, 0.94))
+	var resume_button := Button.new()
+	resume_button.text = "RESUME  [ ESC ]"
+	resume_button.custom_minimum_size = Vector2(0, 42)
+	resume_button.pressed.connect(_resume_game)
+	pause_box.add_child(resume_button)
+	pause_panel.hide()
+
+func _refresh_dodge_hud() -> void:
+	if not is_instance_valid(player) or not is_instance_valid(dodge_label):
+		return
+	if player.dodge_charges >= player.max_dodge_charges:
+		dodge_label.text = "DODGE  %d / %d  ·  READY" % [player.dodge_charges, player.max_dodge_charges]
+	else:
+		dodge_label.text = "DODGE  %d / %d  ·  NEXT IN %.1fs" % [player.dodge_charges, player.max_dodge_charges, player._dodge_recharge_timer]
 
 func _refresh_hud() -> void:
 	if not is_instance_valid(player) or not is_instance_valid(hp_bar):
@@ -401,14 +492,16 @@ func _refresh_hud() -> void:
 	hp_label.text = "HP  %d / %d" % [player.hp, player.max_hp]
 	mana_label.text = "MANA  %d / %d" % [player.mana, player.max_mana]
 	level_label.text = "LEVEL %d  ·  %s" % [player.level, "Moonfire Adept" if player.has_moonfire_staff else "Apprentice"]
-	weapon_label.text = "Weapon: %s  (+%d power)" % [player.weapon_name, player.weapon_bonus]
+	weapon_label.text = "Weapon: %s  ·  Strike %d / Moonbolt %d" % [player.weapon_name, player.base_damage + player.weapon_bonus, player.magic_damage + player.weapon_bonus * 2]
 	shard_label.text = "Moonshards: %d / 3" % player.moon_shards
 	quest_label.text = "Quest complete!" if quest_completed else "Defeat 5 Voidlings  (%d/5)" % mini(defeated_count, 5)
 	enemy_label.text = "%d Voidlings in the clearing" % get_tree().get_nodes_in_group("enemies").size()
+	_refresh_dodge_hud()
 	if inventory_panel != null:
-		inventory_label.text = "Level: %d\nHP: %d / %d\nMana: %d / %d\nXP: %d / %d\n\nWeapon: %s\nPower bonus: +%d\nMoonshards: %d / 3\n\nActive spell: Moonbolt (Q)" % [
+		inventory_label.text = "Level: %d\nHP: %d / %d\nMana: %d / %d\nXP: %d / %d\n\nWeapon: %s\nStrike damage: %d\nMoonbolt damage: %d\nMoonshards: %d / 3" % [
 			player.level, player.hp, player.max_hp, player.mana, player.max_mana,
-			player.xp, player.xp_to_next, player.weapon_name, player.weapon_bonus, player.moon_shards
+			player.xp, player.xp_to_next, player.weapon_name, player.base_damage + player.weapon_bonus,
+			player.magic_damage + player.weapon_bonus * 2, player.moon_shards
 		]
 
 func _show_toast(message: String) -> void:
@@ -418,6 +511,6 @@ func _show_toast(message: String) -> void:
 	var current_token := toast_token
 	toast_label.text = message
 	toast_panel.show()
-	await get_tree().create_timer(2.7).timeout
+	await get_tree().create_timer(2.7, false).timeout
 	if is_instance_valid(toast_panel) and current_token == toast_token:
 		toast_panel.hide()

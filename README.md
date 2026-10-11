@@ -10,19 +10,20 @@ flatpak run org.godotengine.Godot --path ~/Projects/AnimeFantasyRPG
 ```
 
 ## Controls
-- **WASD / Arrow keys** — Move
-- **Space / Left mouse button** — Basic strike (nearby target)
-- **Q** — Cast Moonbolt on the nearest Voidling (mana cost)
-- **I** — Open/close inventory
-- **E** — Spend 3 Moonshards to upgrade Apprentice Wand into Moonfire Staff
-- **Esc** — Close inventory
+- **WASD** — Move
+- **Left mouse button** — Basic strike against a nearby Voidling
+- **Space** — Dodge; 2 charges available, one charge starts recharging every 1.25 seconds after being spent
+- **Q** — Auto-lock the nearest Voidling within 18 metres and fire a homing Moonbolt that chases it (15 Mana; 24 base damage). It does not aim based on the mouse cursor.
+- **I** — Open/close the satchel; opening it pauses the entire game, including enemies and timers
+- **E** — At the glowing Moon Shrine, spend 3 Moonshards to awaken the Apprentice Wand into the Moonfire Staff
+- **Esc** — Close the satchel and resume; if the satchel is closed, open/close the pause menu
 
 ## Playable loop
 1. Defeat Voidlings for XP; level ups raise max HP/mana and basic damage.
 2. Voidlings can drop Moonshards.
-3. Collect 3 shards and press E to get the Moonfire Staff, which boosts strike and magic damage.
+3. Collect 3 shards, return to the glowing Moon Shrine, and press E to awaken the Moonfire Staff. Its appearance and displayed strike/Moonbolt damage change.
 4. Complete the opening quest by defeating 5 Voidlings. Enemies respawn so combat can continue.
-5. If HP reaches zero, the shrine revives the player.
+5. Floating damage numbers and a remaining-HP label help read combat. If HP reaches zero, the shrine revives the player.
 
 ## Current scope and limitations
 This is a prototype, not a finished commercial-quality game. Character shapes are placeholders built from primitives. There are no external anime character models, detailed animation rigs, dialogue trees, save/load, audio, crafting or full map yet. These systems are listed in the roadmap and should be added in small, tested milestones.

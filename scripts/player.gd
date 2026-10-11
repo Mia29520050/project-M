@@ -6,7 +6,13 @@ signal magic_requested(origin: Vector3, target: Node3D, damage: int)
 signal defeated
 
 const WALK_SPEED := 5.8
+const DODGE_SPEED := 13.0
+const DODGE_DURATION := 0.22
+const DODGE_RECHARGE_PER_CHARGE := 1.25
 const GRAVITY := 22.0
+const MANA_REGEN_PER_SEC := 4.0
+const MANA_REGEN_DELAY_AFTER_CAST := 1.5
+const FALL_RESET_Y := -5.0
 var level := 1
 var xp := 0
 var xp_to_next := 50
@@ -23,6 +29,18 @@ var moon_shards := 0
 var has_moonfire_staff := false
 var _attack_timer := 0.0
 var _magic_timer := 0.0
+var _dodge_timer := 0.0
+var max_dodge_charges := 2
+var dodge_charges := 2
+var _dodge_recharge_timer := 0.0
+var _invulnerability_timer := 0.0
+var _dodge_direction := Vector3.ZERO
+var _facing_yaw := 0.0
+var controls_locked := false
+var _staff_instance: MeshInstance3D
+var _gem_instance: MeshInstance3D
+var _mana_regen_delay := 0.0
+var _mana_regen_accumulator := 0.0
 var _defeated := false
 var _time := 0.0
 var _attack_anim := 0.0
@@ -105,6 +123,7 @@ func _build_visuals() -> void:
 	staff_mesh.height = 1.3
 	staff.mesh = staff_mesh
 	staff.material_override = _material(Color(0.59, 0.39, 0.86), 0.25)
+	_staff_instance = staff
 	staff.position = Vector3(0.55, 0.77, 0.05)
 	staff.rotation_degrees.z = -9.0
 	_visual_root.add_child(staff)
@@ -115,48 +134,115 @@ func _build_visuals() -> void:
 	gem_mesh.height = 0.30
 	gem.mesh = gem_mesh
 	gem.material_override = _material(Color(0.63, 0.92, 1.0), 0.1, true)
+	_gem_instance = gem
 	gem.position = Vector3(0.55, 1.43, 0.05)
 	_visual_root.add_child(gem)
 
 func _physics_process(delta: float) -> void:
+	if global_position.y < FALL_RESET_Y:
+		global_position = Vector3(0.0, 0.0, 6.0)
+		velocity = Vector3.ZERO
+		_dodge_timer = 0.0
+		return
 	_time += delta
 	_attack_timer = maxf(0.0, _attack_timer - delta)
 	_magic_timer = maxf(0.0, _magic_timer - delta)
+	_dodge_timer = maxf(0.0, _dodge_timer - delta)
+	_invulnerability_timer = maxf(0.0, _invulnerability_timer - delta)
+	if dodge_charges < max_dodge_charges:
+		_dodge_recharge_timer = maxf(0.0, _dodge_recharge_timer - delta)
+		if _dodge_recharge_timer <= 0.0:
+			dodge_charges += 1
+			_dodge_recharge_timer = DODGE_RECHARGE_PER_CHARGE if dodge_charges < max_dodge_charges else 0.0
+			stats_changed.emit()
+	else:
+		_dodge_recharge_timer = 0.0
 	if _defeated:
 		velocity.x = move_toward(velocity.x, 0.0, WALK_SPEED * delta * 3.0)
 		velocity.z = move_toward(velocity.z, 0.0, WALK_SPEED * delta * 3.0)
 		return
 
+	if _mana_regen_delay > 0.0:
+		_mana_regen_delay = maxf(0.0, _mana_regen_delay - delta)
+	elif mana < max_mana:
+		_mana_regen_accumulator += delta * MANA_REGEN_PER_SEC
+		var whole_mana: int = int(_mana_regen_accumulator)
+		if whole_mana > 0:
+			var restored: int = mini(whole_mana, max_mana - mana)
+			mana += restored
+			_mana_regen_accumulator -= float(whole_mana)
+			stats_changed.emit()
+	else:
+		_mana_regen_accumulator = 0.0
+
 	var direction := Vector3.ZERO
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP): direction.z -= 1.0
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN): direction.z += 1.0
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT): direction.x -= 1.0
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT): direction.x += 1.0
+	if not controls_locked:
+		if Input.is_action_pressed("move_up"): direction.z -= 1.0
+		if Input.is_action_pressed("move_down"): direction.z += 1.0
+		if Input.is_action_pressed("move_left"): direction.x -= 1.0
+		if Input.is_action_pressed("move_right"): direction.x += 1.0
 	direction = direction.normalized()
-	velocity.x = direction.x * WALK_SPEED
-	velocity.z = direction.z * WALK_SPEED
+	if direction.length_squared() > 0.01:
+		_facing_yaw = atan2(direction.x, direction.z)
+
+	if _dodge_timer > 0.0 and not controls_locked:
+		velocity.x = _dodge_direction.x * DODGE_SPEED
+		velocity.z = _dodge_direction.z * DODGE_SPEED
+		_visual_root.scale = Vector3(0.88, 0.90, 0.88)
+	else:
+		velocity.x = direction.x * WALK_SPEED
+		velocity.z = direction.z * WALK_SPEED
+		_visual_root.scale = Vector3.ONE
+
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 	else:
 		velocity.y = -0.25
 
 	if direction.length_squared() > 0.01:
-		_visual_root.rotation.y = atan2(direction.x, direction.z)
 		_visual_root.position.y = sin(_time * 9.0) * 0.025
 	else:
 		_visual_root.position.y = move_toward(_visual_root.position.y, 0.0, delta * 0.2)
+	var attack_sway := sin((_attack_anim / 0.28) * PI) * 0.20 if _attack_anim > 0.0 else 0.0
 	if _attack_anim > 0.0:
 		_attack_anim = maxf(0.0, _attack_anim - delta)
-		_visual_root.rotation.y += sin(_attack_anim * 17.0) * 0.5
+	_visual_root.rotation.y = _facing_yaw + attack_sway
 	move_and_slide()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _defeated: return
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_SPACE: perform_attack()
-		elif event.keycode == KEY_Q: cast_magic()
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+	if _defeated or controls_locked:
+		return
+	if event is InputEventKey and event.echo:
+		return
+	if event.is_action_pressed("attack"):
 		perform_attack()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("moonbolt"):
+		cast_magic()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("dodge"):
+		_start_dodge()
+		get_viewport().set_input_as_handled()
+
+func _start_dodge() -> void:
+	if _defeated or controls_locked or dodge_charges <= 0:
+		return
+	var input_direction := Vector3.ZERO
+	if Input.is_action_pressed("move_up"): input_direction.z -= 1.0
+	if Input.is_action_pressed("move_down"): input_direction.z += 1.0
+	if Input.is_action_pressed("move_left"): input_direction.x -= 1.0
+	if Input.is_action_pressed("move_right"): input_direction.x += 1.0
+	if input_direction.length_squared() > 0.01:
+		_dodge_direction = input_direction.normalized()
+	else:
+		_dodge_direction = Vector3(sin(_facing_yaw), 0.0, cos(_facing_yaw)).normalized()
+	_dodge_timer = DODGE_DURATION
+	dodge_charges -= 1
+	if _dodge_recharge_timer <= 0.0:
+		_dodge_recharge_timer = DODGE_RECHARGE_PER_CHARGE
+	_invulnerability_timer = DODGE_DURATION
+	stats_changed.emit()
+	notification_requested.emit("Dodge! %d/%d charges left." % [dodge_charges, max_dodge_charges])
 
 func perform_attack() -> void:
 	if _attack_timer > 0.0 or _defeated: return
@@ -171,6 +257,10 @@ func perform_attack() -> void:
 			nearest = distance
 			target = item as Node3D
 	if target != null and target.has_method("take_damage"):
+		var to_target: Vector3 = target.global_position - global_position
+		to_target.y = 0.0
+		if to_target.length_squared() > 0.01:
+			_facing_yaw = atan2(to_target.x, to_target.z)
 		target.call("take_damage", base_damage + weapon_bonus)
 	else:
 		notification_requested.emit("Move closer to a Voidling to strike.")
@@ -178,7 +268,7 @@ func perform_attack() -> void:
 func cast_magic() -> void:
 	if _magic_timer > 0.0 or _defeated: return
 	if mana < mana_cost:
-		notification_requested.emit("Not enough mana. Wait for it to recover.")
+		notification_requested.emit("Not enough mana. Wait a moment for it to regenerate.")
 		return
 	var target: Node3D = null
 	var nearest := 18.0
@@ -193,7 +283,11 @@ func cast_magic() -> void:
 		return
 	mana -= mana_cost
 	_magic_timer = 0.85
-	magic_requested.emit(global_position + Vector3(0, 1.25, 0), target, magic_damage + weapon_bonus * 2)
+	_mana_regen_delay = MANA_REGEN_DELAY_AFTER_CAST
+	_mana_regen_accumulator = 0.0
+	var bolt_damage: int = magic_damage + weapon_bonus * 2
+	magic_requested.emit(global_position + Vector3(0, 1.25, 0), target, bolt_damage)
+	notification_requested.emit("MOONBOLT launched: homing shot • %d damage • %d Mana." % [bolt_damage, mana_cost])
 	stats_changed.emit()
 
 func gain_xp(amount: int) -> void:
@@ -216,14 +310,14 @@ func gain_xp(amount: int) -> void:
 	stats_changed.emit()
 
 func take_damage(amount: int) -> void:
-	if _defeated: return
+	if _defeated or _invulnerability_timer > 0.0: return
 	hp = maxi(0, hp - amount)
 	stats_changed.emit()
 	if hp <= 0:
 		_defeated = true
 		defeated.emit()
 		notification_requested.emit("You have fallen. Returning to the Moonveil shrine...")
-		await get_tree().create_timer(2.0).timeout
+		await get_tree().create_timer(2.0, false).timeout
 		if not is_inside_tree(): return
 		hp = max_hp
 		mana = max_mana
@@ -250,6 +344,10 @@ func equip_moonfire_staff() -> bool:
 	weapon_name = "Moonfire Staff"
 	weapon_bonus = 8
 	magic_damage += 12
-	notification_requested.emit("Equipment upgraded: Moonfire Staff! Magic power increased.")
+	if is_instance_valid(_staff_instance):
+		_staff_instance.material_override = _material(Color(0.96, 0.38, 0.78), 0.55, true)
+	if is_instance_valid(_gem_instance):
+		_gem_instance.material_override = _material(Color(1.0, 0.66, 0.91), 0.25, true)
+	notification_requested.emit("MOONFIRE STAFF AWAKENED! Strike %d damage • Moonbolt %d damage." % [base_damage + weapon_bonus, magic_damage + weapon_bonus * 2])
 	stats_changed.emit()
 	return true
