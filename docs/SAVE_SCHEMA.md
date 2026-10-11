@@ -15,13 +15,14 @@ Path: `user://moonveil_account.json`
 {
   "schema_version": 1,
   "active_character_id": "moonveil_mage",
+  "has_selected_character": false,
   "unlocked_character_ids": ["moonveil_mage", "sword_duelist"],
   "banked_currency": 0,
   "shared_stash": []
 }
 ```
 
-The starter schema uses an empty shared stash by default. Stash entries have a stable `item_id` and positive integer `quantity`. Duplicate IDs are merged when normalizing loaded data.
+The starter schema uses an empty shared stash by default. `has_selected_character` is false only for a fresh profile that has not completed the campfire choice; confirming a wayfarer persists it as true. For backward compatibility, existing account files that already contain `active_character_id` but lack this field are treated as already selected. Stash entries have a stable `item_id` and positive integer `quantity`. Duplicate IDs are merged when normalizing loaded data.
 
 ## Character files
 
@@ -53,7 +54,7 @@ Each profile owns character-specific progression, attributes, skills, equipment 
 - Writes use a temporary file followed by an atomic rename in the same directory.
 - Unsupported versions, invalid JSON and character ID mismatches are left untouched on disk; defaults are used only in memory and a warning is emitted.
 - IDs, currencies, quantities and core numeric progression values are validated and normalized on load.
-- The Refuge's Wayfarers' Fire now provides clickable in-world characters with a small contextual confirmation strip and persists the active character ID. The live Player's run level/XP, HP, current equipment upgrades, potions, and Moonshards are still prototype-scoped; bank/stash UI and an in-game economy are not yet implemented.
+- On a fresh account, the Wayfarers' Fire opens a focused camera view; clicking a physical wayfarer highlights them, then a second click, E or a compact confirm button commits the choice. After initial selection the Refuge remains freely explorable, and E near the fire reopens the focused chooser. Confirming a choice persists both `active_character_id` and `has_selected_character`. The live Player's run level/XP, HP, current equipment upgrades, potions, and Moonshards are still prototype-scoped; bank/stash UI and an in-game economy are not yet implemented.
 - No migration is applied to `moonveil_meta.json`; its existing version-1 content remains separate and compatible.
 
 ## Next integration steps

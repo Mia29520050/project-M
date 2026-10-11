@@ -7,6 +7,8 @@ const SHRINE_POSITION := Vector3(0.0, 0.0, -1.0)
 const INTERACT_RANGE := 4.8
 const CAMPFIRE_POSITION := Vector3(-5.4, 0.0, 1.0)
 const CAMPFIRE_INTERACT_RANGE := 3.8
+const HUB_CAMERA_SIZE := 14.5
+const CAMPFIRE_CAMERA_SIZE := 7.8
 
 var player: Node3D
 var camera: Camera3D
@@ -15,20 +17,27 @@ var status_label: Label
 var pause_label: Label
 var _transitioning := false
 var _selection_open := false
+var _initial_selection_required := false
+var _camera_focus_amount := 0.0
+var _camera_transition_tween: Tween
 var selection_layer: CanvasLayer
 var character_selection_panel: PanelContainer
 var selection_heading: Label
 var selection_details: Label
 var confirm_button: Button
 var selection_status: Label
-var selected_character_id := "moonveil_mage"
-var _last_clicked_character := ""
-var _last_click_msec := 0
+var selection_hint_label: Label
+var hub_info_panel: PanelContainer
+var selected_character_id := ""
 var _showcase_time := 0.0
 var showcase_roots: Array[Node3D] = []
+var showcase_selection_pads: Array[MeshInstance3D] = []
+var showcase_selection_rings: Array[MeshInstance3D] = []
+var shrine_focus_decorations: Array[Node3D] = []
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_initial_selection_required = not bool(MoonveilProfiles.account_data.get("has_selected_character", false))
 	_build_environment()
 	_build_world()
 	_build_hud()
@@ -44,8 +53,18 @@ func _process(delta: float) -> void:
 			showcase_roots[index].position.y = sin(_showcase_time * 1.35 + float(index)) * 0.025
 			showcase_roots[index].rotation.y = 0.25 + sin(_showcase_time * 0.55 + float(index)) * 0.07
 	if is_instance_valid(camera) and is_instance_valid(player):
-		camera.global_position = player.global_position + Vector3(0.0, 17.0, 13.0)
-		camera.look_at(player.global_position + Vector3(0.0, 0.75, 0.0), Vector3.UP)
+		# A fresh account has no visible avatar yet, so frame the fire and Shrine together
+		# instead of centering the camera on the hidden spawn point at the far side of the plaza.
+		var hub_focus_position := player.global_position
+		if _initial_selection_required:
+			hub_focus_position = Vector3(-2.2, 0.0, 2.0)
+		var hub_camera_position := hub_focus_position + Vector3(0.0, 14.0, 10.8)
+		var hub_look_target := hub_focus_position + Vector3(0.0, 0.75, 0.0)
+		var fire_camera_position := CAMPFIRE_POSITION + Vector3(0.0, 8.6, 6.8)
+		var fire_look_target := CAMPFIRE_POSITION + Vector3(0.0, 0.78, 0.0)
+		camera.global_position = hub_camera_position.lerp(fire_camera_position, _camera_focus_amount)
+		camera.look_at(hub_look_target.lerp(fire_look_target, _camera_focus_amount), Vector3.UP)
+		camera.size = lerpf(HUB_CAMERA_SIZE, CAMPFIRE_CAMERA_SIZE, _camera_focus_amount)
 	_refresh_prompt()
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -57,7 +76,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			get_tree().paused = not get_tree().paused
 			if is_instance_valid(player):
-				player.controls_locked = get_tree().paused
+				player.controls_locked = get_tree().paused or _initial_selection_required
 			if is_instance_valid(pause_label):
 				pause_label.visible = get_tree().paused
 		get_viewport().set_input_as_handled()
@@ -66,20 +85,24 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if _selection_open:
 		if event.is_action_pressed("interact") or (event is InputEventKey and event.pressed and event.keycode in [KEY_ENTER, KEY_KP_ENTER]):
-			_confirm_character_selection()
+			if selected_character_id.is_empty():
+				selection_hint_label.text = "Choose a wayfarer first, then press E to confirm."
+			else:
+				_confirm_character_selection()
 			get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("interact"):
 		get_viewport().set_input_as_handled()
 		if not is_instance_valid(player):
 			return
-		var nearby_character := _nearest_showcase_character(3.4)
-		if not nearby_character.is_empty():
-			_select_character_in_world(nearby_character)
+		if _initial_selection_required:
+			_open_campfire_selection()
+		elif player.global_position.distance_to(CAMPFIRE_POSITION) <= CAMPFIRE_INTERACT_RANGE:
+			_open_campfire_selection()
 		elif player.global_position.distance_to(SHRINE_POSITION) <= INTERACT_RANGE:
 			_start_run()
 		else:
-			_show_message("Approach a wayfarer at the fire to choose them, or visit the Moon Shrine to depart.")
+			_show_message("Press E near the Wayfarers' Fire to change heroes, or visit the Moon Shrine to depart.")
 
 func _start_run() -> void:
 	if _transitioning:
@@ -101,7 +124,8 @@ func _spawn_selected_player(character_id: String, spawn_position: Vector3) -> vo
 	player = selected_scene.instantiate() as CharacterBody3D
 	player.process_mode = Node.PROCESS_MODE_PAUSABLE
 	player.position = spawn_position
-	player.controls_locked = _selection_open or get_tree().paused
+	player.controls_locked = _selection_open or _initial_selection_required or get_tree().paused
+	player.visible = not (_selection_open or _initial_selection_required)
 	player.notification_requested.connect(_show_message)
 	add_child(player)
 
@@ -117,13 +141,30 @@ func _create_camera() -> void:
 	camera = Camera3D.new()
 	camera.name = "RefugeCamera"
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = 16.0
+	camera.size = HUB_CAMERA_SIZE
 	camera.near = 0.1
 	camera.far = 120.0
 	add_child(camera)
-	camera.global_position = player.global_position + Vector3(0.0, 17.0, 13.0)
-	camera.look_at(player.global_position + Vector3(0.0, 0.65, 0.0), Vector3.UP)
+	camera.global_position = player.global_position + Vector3(0.0, 14.0, 10.8)
+	camera.look_at(player.global_position + Vector3(0.0, 0.75, 0.0), Vector3.UP)
 	camera.current = true
+
+func _transition_camera_to_campfire(focused: bool) -> void:
+	if _camera_transition_tween != null and _camera_transition_tween.is_running():
+		_camera_transition_tween.kill()
+	_camera_transition_tween = create_tween()
+	_camera_transition_tween.set_trans(Tween.TRANS_CUBIC)
+	_camera_transition_tween.set_ease(Tween.EASE_IN_OUT)
+	_camera_transition_tween.tween_property(self, "_camera_focus_amount", 1.0 if focused else 0.0, 0.62)
+	_camera_transition_tween.finished.connect(_on_camera_transition_finished)
+
+func _on_camera_transition_finished() -> void:
+	if not is_instance_valid(player):
+		return
+	var blocked := _selection_open or _initial_selection_required or get_tree().paused
+	player.controls_locked = blocked
+	player.visible = not (_selection_open or _initial_selection_required)
+	_refresh_prompt()
 
 func _build_environment() -> void:
 	var environment_node := WorldEnvironment.new()
@@ -158,25 +199,27 @@ func _build_world() -> void:
 	var ground_box := BoxMesh.new()
 	ground_box.size = Vector3(30.0, 0.4, 30.0)
 	ground_mesh.mesh = ground_box
-	ground_mesh.material_override = _material(Color(0.13, 0.22, 0.30))
+	ground_mesh.material_override = _material(Color(0.055, 0.075, 0.12), 0.04)
 	ground.add_child(ground_mesh)
+	_create_refuge_ground_detail()
 
 	# Safe-zone shrine: it is visual-only on top of the ground collider.
 	var shrine_pad := MeshInstance3D.new()
 	var pad_mesh := CylinderMesh.new()
-	pad_mesh.top_radius = 2.25
-	pad_mesh.bottom_radius = 2.45
+	pad_mesh.top_radius = 1.82
+	pad_mesh.bottom_radius = 1.98
 	pad_mesh.height = 0.14
 	pad_mesh.radial_segments = 48
 	shrine_pad.mesh = pad_mesh
 	shrine_pad.position = SHRINE_POSITION + Vector3(0.0, 0.025, 0.0)
 	shrine_pad.material_override = _material(Color(0.25, 0.31, 0.48), 0.25)
 	add_child(shrine_pad)
+	shrine_focus_decorations.append(shrine_pad)
 
 	var outer_ring := MeshInstance3D.new()
 	var ring_mesh := TorusMesh.new()
-	ring_mesh.inner_radius = 1.68
-	ring_mesh.outer_radius = 1.80
+	ring_mesh.inner_radius = 1.35
+	ring_mesh.outer_radius = 1.46
 	ring_mesh.rings = 8
 	ring_mesh.ring_segments = 64
 	outer_ring.mesh = ring_mesh
@@ -184,21 +227,23 @@ func _build_world() -> void:
 	outer_ring.material_override = _material(Color(0.34, 0.72, 1.0), 0.1, true)
 	outer_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(outer_ring)
+	shrine_focus_decorations.append(outer_ring)
 
-	_add_crystal(SHRINE_POSITION + Vector3(0.0, 0.0, 0.0), Color(0.46, 0.82, 1.0), 1.7)
-	_add_crystal(SHRINE_POSITION + Vector3(-1.15, 0.0, 0.55), Color(0.77, 0.54, 1.0), 0.95)
-	_add_crystal(SHRINE_POSITION + Vector3(1.15, 0.0, 0.55), Color(0.77, 0.54, 1.0), 0.95)
-	_add_crystal(Vector3(-5.5, 0.0, -5.0), Color(0.38, 0.71, 0.91), 0.78)
-	_add_crystal(Vector3(5.8, 0.0, 4.8), Color(0.67, 0.45, 0.91), 0.85)
+	shrine_focus_decorations.append(_add_crystal(SHRINE_POSITION + Vector3(0.0, 0.0, 0.0), Color(0.46, 0.82, 1.0), 1.7))
+	shrine_focus_decorations.append(_add_crystal(SHRINE_POSITION + Vector3(-1.15, 0.0, 0.55), Color(0.77, 0.54, 1.0), 0.95))
+	shrine_focus_decorations.append(_add_crystal(SHRINE_POSITION + Vector3(1.15, 0.0, 0.55), Color(0.77, 0.54, 1.0), 0.95))
+	shrine_focus_decorations.append(_add_crystal(Vector3(-5.5, 0.0, -5.0), Color(0.38, 0.71, 0.91), 0.78))
+	shrine_focus_decorations.append(_add_crystal(Vector3(5.8, 0.0, 4.8), Color(0.67, 0.45, 0.91), 0.85))
 
 	var title := Label3D.new()
 	title.text = "MOONVEIL REFUGE"
-	title.font_size = 42
+	title.font_size = 36
 	title.pixel_size = 0.007
 	title.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	title.modulate = Color(0.78, 0.89, 1.0)
-	title.position = SHRINE_POSITION + Vector3(0.0, 3.0, -0.2)
+	title.position = SHRINE_POSITION + Vector3(0.0, 2.7, -0.2)
 	add_child(title)
+	shrine_focus_decorations.append(title)
 
 	# Simple stones mark the route into the next run without building the Woods here.
 	for index in range(7):
@@ -210,10 +255,50 @@ func _build_world() -> void:
 		stone.rotation.y = sin(float(index) * 0.65) * 0.06
 		stone.material_override = _material(Color(0.30, 0.37, 0.51) if index % 2 == 0 else Color(0.24, 0.31, 0.44), 0.08)
 		add_child(stone)
+		shrine_focus_decorations.append(stone)
 
 	_create_fire_camp()
 	_create_character_showcase("moonveil_mage", CAMPFIRE_POSITION + Vector3(-1.85, 0.0, 0.55))
 	_create_character_showcase("sword_duelist", CAMPFIRE_POSITION + Vector3(1.85, 0.0, 0.55))
+
+func _create_refuge_ground_detail() -> void:
+	# Low-contrast paving breaks up the blue-grey floor without adding physics overhead.
+	var tile_palette: Array[Color] = [
+		Color(0.105, 0.13, 0.19),
+		Color(0.12, 0.145, 0.205),
+		Color(0.09, 0.115, 0.17)
+	]
+	var tile_index := 0
+	for row in range(16):
+		for column_index in range(16):
+			var tile_position := Vector3(-12.0 + float(column_index) * 1.6, 0.018, -12.0 + float(row) * 1.6)
+			if Vector2(tile_position.x - CAMPFIRE_POSITION.x, tile_position.z - CAMPFIRE_POSITION.z).length() < 1.65:
+				continue
+			var tile := MeshInstance3D.new()
+			tile.name = "RefugePaving_%02d" % tile_index
+			var tile_mesh := BoxMesh.new()
+			tile_mesh.size = Vector3(1.48, 0.055, 1.48)
+			tile.mesh = tile_mesh
+			tile.position = tile_position + Vector3(sin(float(tile_index) * 1.7) * 0.045, 0.0, cos(float(tile_index) * 1.3) * 0.045)
+			tile.rotation.y = sin(float(tile_index) * 0.73) * 0.035
+			tile.material_override = _material(tile_palette[tile_index % tile_palette.size()], 0.025)
+			tile.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(tile)
+			tile_index += 1
+
+	# A short chain of broader stones visually connects the fire to the Moon Shrine.
+	for index in range(5):
+		var path_tile := MeshInstance3D.new()
+		var path_mesh := BoxMesh.new()
+		path_mesh.size = Vector3(1.05, 0.07, 0.88)
+		path_tile.mesh = path_mesh
+		var along := 0.23 + float(index) * 0.12
+		path_tile.position = Vector3(lerpf(CAMPFIRE_POSITION.x, SHRINE_POSITION.x, along), 0.045, lerpf(CAMPFIRE_POSITION.z, SHRINE_POSITION.z, along))
+		path_tile.rotation.y = -0.30 + sin(float(index)) * 0.035
+		path_tile.material_override = _material(Color(0.16, 0.18, 0.25) if index % 2 == 0 else Color(0.13, 0.16, 0.23), 0.04)
+		path_tile.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(path_tile)
+		shrine_focus_decorations.append(path_tile)
 
 func _create_fire_camp() -> void:
 	var stone_circle := MeshInstance3D.new()
@@ -280,7 +365,7 @@ func _create_fire_camp() -> void:
 	add_child(fire_light)
 
 	var label := Label3D.new()
-	label.text = "WAYFARERS' FIRE\nCLICK A WAYFARER  ·  E NEAR THEM"
+	label.text = "WAYFARERS' FIRE\nPRESS E TO CHANGE HERO"
 	label.font_size = 30
 	label.pixel_size = 0.006
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -288,13 +373,35 @@ func _create_fire_camp() -> void:
 	label.position = CAMPFIRE_POSITION + Vector3(0.0, 2.3, -0.15)
 	add_child(label)
 
+	var fire_interaction_area := Area3D.new()
+	fire_interaction_area.name = "WayfarersFireInteraction"
+	fire_interaction_area.collision_layer = 1
+	fire_interaction_area.collision_mask = 0
+	fire_interaction_area.input_ray_pickable = true
+	fire_interaction_area.position = CAMPFIRE_POSITION + Vector3(0.0, 0.9, 0.0)
+	var fire_interaction_shape := CollisionShape3D.new()
+	var fire_pick_shape := SphereShape3D.new()
+	fire_pick_shape.radius = 0.95
+	fire_interaction_shape.shape = fire_pick_shape
+	fire_interaction_area.add_child(fire_interaction_shape)
+	add_child(fire_interaction_area)
+	fire_interaction_area.input_event.connect(_on_campfire_input_event)
+
+func _on_campfire_input_event(_camera_node: Node, event: InputEvent, _position: Vector3, _normal: Vector3, _shape_idx: int) -> void:
+	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed):
+		return
+	get_viewport().set_input_as_handled()
+	if _initial_selection_required and not _selection_open:
+		_open_campfire_selection()
+
 func _create_character_showcase(character_id: String, world_position: Vector3) -> void:
 	var root := Node3D.new()
 	root.position = world_position
 	root.rotation.y = 0.25
-	root.scale = Vector3(0.88, 0.88, 0.88)
+	root.scale = Vector3.ONE
 	add_child(root)
 	showcase_roots.append(root)
+	var is_duelist := character_id == "sword_duelist"
 
 	var selection_pad := MeshInstance3D.new()
 	var pad_mesh := CylinderMesh.new()
@@ -306,6 +413,41 @@ func _create_character_showcase(character_id: String, world_position: Vector3) -
 	selection_pad.position.y = 0.045
 	selection_pad.material_override = _material(Color(0.20, 0.55, 0.95) if character_id == "moonveil_mage" else Color(0.90, 0.26, 0.50), 0.22, true)
 	root.add_child(selection_pad)
+	showcase_selection_pads.append(selection_pad)
+
+	var selection_ring := MeshInstance3D.new()
+	var selection_ring_mesh := TorusMesh.new()
+	selection_ring_mesh.inner_radius = 0.72
+	selection_ring_mesh.outer_radius = 0.80
+	selection_ring_mesh.rings = 8
+	selection_ring_mesh.ring_segments = 40
+	selection_ring.mesh = selection_ring_mesh
+	selection_ring.position.y = 0.075
+	selection_ring.material_override = _material(Color(0.54, 0.87, 1.0) if character_id == "moonveil_mage" else Color(1.0, 0.61, 0.78), 0.25, true)
+	selection_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	selection_ring.visible = false
+	root.add_child(selection_ring)
+	showcase_selection_rings.append(selection_ring)
+
+	if is_duelist:
+		# Astra sits on a camp stone to contrast the Mage's upright, active stance.
+		var seat := MeshInstance3D.new()
+		var seat_mesh := BoxMesh.new()
+		seat_mesh.size = Vector3(0.92, 0.18, 0.64)
+		seat.mesh = seat_mesh
+		seat.position = Vector3(0.0, 0.38, -0.06)
+		seat.material_override = _material(Color(0.28, 0.25, 0.38), 0.08)
+		root.add_child(seat)
+		for leg_side in [-1.0, 1.0]:
+			var leg := MeshInstance3D.new()
+			var leg_mesh := CapsuleMesh.new()
+			leg_mesh.radius = 0.13
+			leg_mesh.height = 0.70
+			leg.mesh = leg_mesh
+			leg.position = Vector3(0.18 * leg_side, 0.43, 0.23)
+			leg.rotation_degrees.x = 78.0
+			leg.material_override = _material(Color(0.23, 0.10, 0.23))
+			root.add_child(leg)
 
 	var interaction_body := StaticBody3D.new()
 	interaction_body.name = "CharacterInteraction"
@@ -325,19 +467,21 @@ func _create_character_showcase(character_id: String, world_position: Vector3) -
 	var body := MeshInstance3D.new()
 	var body_mesh := CapsuleMesh.new()
 	body_mesh.radius = 0.34
-	body_mesh.height = 1.24
+	body_mesh.height = 0.92 if is_duelist else 1.24
 	body.mesh = body_mesh
 	body.material_override = _material(Color(0.20, 0.28, 0.58) if character_id == "moonveil_mage" else Color(0.36, 0.10, 0.24), 0.15)
-	body.position.y = 0.85
+	body.position.y = 0.78 if is_duelist else 0.85
+	body.rotation.z = 0.12 if is_duelist else 0.0
 	root.add_child(body)
 
 	var chest := MeshInstance3D.new()
 	var chest_mesh := CapsuleMesh.new()
 	chest_mesh.radius = 0.27
-	chest_mesh.height = 0.83
+	chest_mesh.height = 0.66 if is_duelist else 0.83
 	chest.mesh = chest_mesh
 	chest.material_override = _material(Color(0.27, 0.73, 0.91) if character_id == "moonveil_mage" else Color(0.84, 0.34, 0.49), 0.2)
-	chest.position.y = 0.91
+	chest.position.y = 0.84 if is_duelist else 0.91
+	chest.rotation.z = 0.12 if is_duelist else 0.0
 	root.add_child(chest)
 
 	var head := MeshInstance3D.new()
@@ -346,7 +490,7 @@ func _create_character_showcase(character_id: String, world_position: Vector3) -
 	head_mesh.height = 0.53
 	head.mesh = head_mesh
 	head.material_override = _material(Color(1.0, 0.80, 0.73))
-	head.position.y = 1.63
+	head.position.y = 1.32 if is_duelist else 1.63
 	root.add_child(head)
 
 	var hair := MeshInstance3D.new()
@@ -355,7 +499,7 @@ func _create_character_showcase(character_id: String, world_position: Vector3) -
 	hair_mesh.height = 0.31
 	hair.mesh = hair_mesh
 	hair.material_override = _material(Color(0.20, 0.13, 0.39) if character_id == "moonveil_mage" else Color(0.75, 0.81, 0.94), 0.1)
-	hair.position = Vector3(0.0, 1.82, -0.05)
+	hair.position = Vector3(0.0, 1.51 if is_duelist else 1.82, -0.05)
 	root.add_child(hair)
 
 	var weapon := MeshInstance3D.new()
@@ -373,9 +517,18 @@ func _create_character_showcase(character_id: String, world_position: Vector3) -
 		sword_mesh.size = Vector3(0.09, 0.95, 0.06)
 		weapon.mesh = sword_mesh
 		weapon.material_override = _material(Color(0.84, 0.92, 1.0), 0.65, true)
-		weapon.position = Vector3(0.48, 1.03, 0.04)
-		weapon.rotation_degrees.z = -30.0
+		weapon.position = Vector3(0.48, 0.78, 0.04) if is_duelist else Vector3(0.48, 1.03, 0.04)
+		weapon.rotation_degrees.z = -42.0 if is_duelist else -30.0
 	root.add_child(weapon)
+	if not is_duelist:
+		var magic_orb := MeshInstance3D.new()
+		var orb_mesh := SphereMesh.new()
+		orb_mesh.radius = 0.16
+		orb_mesh.height = 0.32
+		magic_orb.mesh = orb_mesh
+		magic_orb.position = Vector3(0.57, 1.14, 0.20)
+		magic_orb.material_override = _material(Color(0.56, 0.91, 1.0), 0.15, true)
+		root.add_child(magic_orb)
 
 	var title := Label3D.new()
 	title.text = "MOONVEIL MAGE" if character_id == "moonveil_mage" else "ASTRA VALE  ·  DUELIST"
@@ -397,7 +550,7 @@ func _material(color: Color, metallic: float = 0.0, glow: bool = false) -> Stand
 		material.emission_energy_multiplier = 1.4
 	return material
 
-func _add_crystal(position_in_world: Vector3, color: Color, height: float) -> void:
+func _add_crystal(position_in_world: Vector3, color: Color, height: float) -> MeshInstance3D:
 	var crystal := MeshInstance3D.new()
 	var crystal_mesh := CylinderMesh.new()
 	crystal_mesh.top_radius = 0.025
@@ -409,6 +562,12 @@ func _add_crystal(position_in_world: Vector3, color: Color, height: float) -> vo
 	crystal.rotation_degrees.z = 7.0
 	crystal.material_override = _material(color, 0.2, true)
 	add_child(crystal)
+	return crystal
+
+func _set_shrine_decorations_visible(is_visible: bool) -> void:
+	for decoration in shrine_focus_decorations:
+		if is_instance_valid(decoration):
+			decoration.visible = is_visible
 
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
@@ -420,7 +579,8 @@ func _build_hud() -> void:
 	full.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(full)
 
-	var panel := PanelContainer.new()
+	hub_info_panel = PanelContainer.new()
+	var panel := hub_info_panel
 	panel.custom_minimum_size = Vector2(410.0, 135.0)
 	# Keep the hub's campfire and character actors unobstructed.
 	panel.anchor_left = 1.0
@@ -507,6 +667,23 @@ func _build_character_selection_ui() -> void:
 	full.mouse_filter = Control.MOUSE_FILTER_PASS
 	selection_layer.add_child(full)
 
+	selection_hint_label = Label.new()
+	selection_hint_label.anchor_left = 0.5
+	selection_hint_label.anchor_right = 0.5
+	selection_hint_label.offset_left = -500.0
+	selection_hint_label.offset_right = 500.0
+	selection_hint_label.offset_top = 22.0
+	selection_hint_label.offset_bottom = 56.0
+	selection_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	selection_hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	selection_hint_label.add_theme_font_size_override("font_size", 15)
+	selection_hint_label.add_theme_color_override("font_color", Color(0.88, 0.93, 1.0))
+	selection_hint_label.add_theme_color_override("font_outline_color", Color(0.025, 0.035, 0.09, 1.0))
+	selection_hint_label.add_theme_constant_override("outline_size", 3)
+	selection_hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	selection_hint_label.hide()
+	full.add_child(selection_hint_label)
+
 	character_selection_panel = PanelContainer.new()
 	character_selection_panel.anchor_left = 0.5
 	character_selection_panel.anchor_right = 0.5
@@ -554,64 +731,57 @@ func _build_character_selection_ui() -> void:
 	actions.add_theme_constant_override("separation", 12)
 	column.add_child(actions)
 	confirm_button = Button.new()
-	confirm_button.text = "PLAY AS THIS HERO  ·  ENTER"
+	confirm_button.text = "CONFIRM WAYFARER  ·  E"
 	confirm_button.custom_minimum_size = Vector2(265.0, 36.0)
 	confirm_button.add_theme_font_size_override("font_size", 13)
 	confirm_button.pressed.connect(_confirm_character_selection)
 	actions.add_child(confirm_button)
 	var cancel_button := Button.new()
-	cancel_button.text = "CANCEL  [ESC]"
+	cancel_button.text = "BACK TO REFUGE  [ESC]"
 	cancel_button.custom_minimum_size = Vector2(150.0, 36.0)
 	cancel_button.pressed.connect(_close_character_selection)
 	actions.add_child(cancel_button)
 	character_selection_panel.hide()
 
-func _nearest_showcase_character(max_distance: float) -> String:
-	if not is_instance_valid(player):
-		return ""
-	var nearest_id := ""
-	var nearest_distance := max_distance
-	for index in range(showcase_roots.size()):
-		var candidate := showcase_roots[index]
-		if not is_instance_valid(candidate):
-			continue
-		var distance := player.global_position.distance_to(candidate.global_position)
-		if distance <= nearest_distance:
-			nearest_distance = distance
-			nearest_id = "moonveil_mage" if index == 0 else "sword_duelist"
-	return nearest_id
-
 func _on_showcase_input_event(_camera_node: Node, event: InputEvent, _position: Vector3, _normal: Vector3, _shape_idx: int, character_id: String) -> void:
-	if get_tree().paused or _transitioning:
-		return
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed):
 		return
 	get_viewport().set_input_as_handled()
-	var now := Time.get_ticks_msec()
-	if event.double_click or (_last_clicked_character == character_id and now - _last_click_msec <= 450):
-		_select_character_in_world(character_id)
+	if get_tree().paused or _transitioning or not _selection_open or _camera_focus_amount < 0.96:
+		return
+	# First click highlights a wayfarer; clicking that same actor again confirms it.
+	if selected_character_id == character_id:
 		_confirm_character_selection()
-		_last_clicked_character = ""
-		_last_click_msec = 0
 	else:
-		_last_clicked_character = character_id
-		_last_click_msec = now
 		_select_character_in_world(character_id)
 
 func _select_character_in_world(character_id: String) -> void:
-	if character_id not in ["moonveil_mage", "sword_duelist"] or _transitioning:
+	if not _selection_open or character_id not in ["moonveil_mage", "sword_duelist"] or _transitioning:
 		return
-	_selection_open = true
 	selected_character_id = character_id
-	if is_instance_valid(player):
-		player.controls_locked = true
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	_refresh_character_buttons()
 	character_selection_panel.show()
+	selection_hint_label.text = "Click the same wayfarer again or press E to confirm  ·  Esc to return"
 
 func _refresh_character_buttons() -> void:
 	if not is_instance_valid(selection_heading) or not is_instance_valid(selection_details):
 		return
+	for index in range(showcase_roots.size()):
+		var character_id := "moonveil_mage" if index == 0 else "sword_duelist"
+		var is_selected := character_id == selected_character_id
+		showcase_roots[index].scale = Vector3.ONE * (1.07 if is_selected else 1.0)
+		showcase_selection_pads[index].scale = Vector3.ONE * (1.05 if is_selected else 1.0)
+		# Keep the selected pad richly colored; the emissive torus provides the glow
+		# without washing the platform out to white under the directional light.
+		showcase_selection_pads[index].material_override = _material(
+			Color(0.12, 0.40, 0.59) if is_selected and character_id == "moonveil_mage" else
+			Color(0.50, 0.16, 0.31) if is_selected else
+			Color(0.20, 0.55, 0.95) if character_id == "moonveil_mage" else Color(0.90, 0.26, 0.50),
+			0.24 if is_selected else 0.22,
+			false if is_selected else true
+		)
+		showcase_selection_rings[index].visible = is_selected
 	if selected_character_id == "sword_duelist":
 		selection_heading.text = "ASTRA VALE  ·  SWORD DUELIST"
 		selection_heading.add_theme_color_override("font_color", Color(1.0, 0.69, 0.82))
@@ -620,48 +790,80 @@ func _refresh_character_buttons() -> void:
 		selection_heading.text = "MOONVEIL MAGE"
 		selection_heading.add_theme_color_override("font_color", Color(0.70, 0.86, 1.0))
 		selection_details.text = "100 HP  ·  60 Mana\nQ: homing Moonbolt  ·  Ranged arcane combat"
-	if is_instance_valid(selection_status) and is_instance_valid(player):
-		selection_status.text = "You're already controlling this hero." if player.character_id == selected_character_id else "Selected wayfarer — confirm to switch control."
+	if is_instance_valid(selection_status):
+		if _initial_selection_required:
+			selection_status.text = "Choose this wayfarer to begin your first journey."
+		elif is_instance_valid(player) and player.character_id == selected_character_id:
+			selection_status.text = "You're already controlling this hero."
+		else:
+			selection_status.text = "Selected wayfarer — confirm to switch control."
 
 func _open_character_selection() -> void:
-	# Kept as a compatibility wrapper: E only opens details for the nearest physical hero,
-	# never a full roster menu.
-	var character_id := _nearest_showcase_character(3.4)
-	if not character_id.is_empty():
-		_select_character_in_world(character_id)
+	# Kept for compatibility with old callers; selection is now always centered on the fire.
+	_open_campfire_selection()
 
-func _close_character_selection() -> void:
-	_selection_open = false
+func _open_campfire_selection() -> void:
+	if _selection_open or _transitioning or get_tree().paused:
+		return
+	_selection_open = true
+	selected_character_id = ""
+	if is_instance_valid(player):
+		player.controls_locked = true
+		player.visible = false
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	if is_instance_valid(character_selection_panel):
 		character_selection_panel.hide()
-	if is_instance_valid(player):
-		player.controls_locked = get_tree().paused
-	_last_clicked_character = ""
-	_last_click_msec = 0
-	_refresh_prompt()
+	if is_instance_valid(selection_hint_label):
+		selection_hint_label.text = "Choose a wayfarer to inspect their abilities"
+		selection_hint_label.show()
+	if is_instance_valid(hub_info_panel):
+		hub_info_panel.hide()
+	if is_instance_valid(status_label):
+		status_label.hide()
+	_set_shrine_decorations_visible(false)
+	_refresh_character_buttons()
+	_transition_camera_to_campfire(true)
 
-func _confirm_character_selection() -> void:
+func _close_character_selection() -> void:
 	if not _selection_open:
 		return
+	_selection_open = false
+	selected_character_id = ""
+	if is_instance_valid(character_selection_panel):
+		character_selection_panel.hide()
+	if is_instance_valid(selection_hint_label):
+		selection_hint_label.hide()
+	if is_instance_valid(hub_info_panel):
+		hub_info_panel.show()
+	if is_instance_valid(status_label):
+		status_label.visible = not get_tree().paused
+	_set_shrine_decorations_visible(true)
+	if is_instance_valid(player):
+		player.controls_locked = true
+		player.visible = false
+	_refresh_character_buttons()
+	_transition_camera_to_campfire(false)
+
+func _confirm_character_selection() -> void:
+	if not _selection_open or selected_character_id.is_empty():
+		return
+	var chosen_character_id := selected_character_id
 	var unlocked: Array = MoonveilProfiles.account_data.get("unlocked_character_ids", [])
-	if not unlocked.has(selected_character_id):
+	if not unlocked.has(chosen_character_id):
 		selection_status.text = "This wayfarer is not unlocked on this account."
 		return
-	if is_instance_valid(player) and player.character_id == selected_character_id:
-		_close_character_selection()
-		_show_message("You're already controlling this wayfarer.")
-		return
-	if not MoonveilProfiles.set_active_character(selected_character_id):
+	if not MoonveilProfiles.set_active_character(chosen_character_id):
 		selection_status.text = "Could not save this selection. Your current wayfarer is unchanged."
 		return
 	if not MoonveilProfiles.save_active_character():
 		selection_status.text = "Selected for this session, but saving the profile failed. Check storage space."
 		return
-	_replace_player(selected_character_id)
+	_initial_selection_required = false
+	if not is_instance_valid(player) or player.character_id != chosen_character_id:
+		_replace_player(chosen_character_id)
+	var display_name := "Astra Vale, Sword Duelist" if chosen_character_id == "sword_duelist" else "Moonveil Mage"
 	_close_character_selection()
-	var display_name := "Astra Vale, Sword Duelist" if selected_character_id == "sword_duelist" else "Moonveil Mage"
 	_show_message("Now controlling %s. Visit the Moon Shrine when ready to depart." % display_name)
-	_refresh_prompt()
 
 func _refresh_prompt() -> void:
 	if not is_instance_valid(prompt_label) or not is_instance_valid(player):
@@ -670,17 +872,20 @@ func _refresh_prompt() -> void:
 		prompt_label.text = "Choose a wayfarer by the fire"
 	elif _transitioning:
 		prompt_label.text = "The Veil opens…"
-	elif not _nearest_showcase_character(3.4).is_empty():
-		var nearby_id := _nearest_showcase_character(3.4)
-		var nearby_name := "Moonveil Mage" if nearby_id == "moonveil_mage" else "Astra Vale · Sword Duelist"
-		prompt_label.text = "Click %s or press E to interact" % nearby_name
+	elif _initial_selection_required:
+		prompt_label.text = "Click the Wayfarers' Fire to choose your first hero"
+	elif player.global_position.distance_to(CAMPFIRE_POSITION) <= CAMPFIRE_INTERACT_RANGE:
+		prompt_label.text = "Press E at the Wayfarers' Fire to change heroes"
 	elif player.global_position.distance_to(SHRINE_POSITION) <= INTERACT_RANGE:
 		prompt_label.text = "Press E at the Moon Shrine to enter Whispering Woods"
 	else:
-		prompt_label.text = "Approach a wayfarer and click them to switch heroes   ·   Moon Shrine: start a journey"
+		prompt_label.text = "Explore the Refuge   ·   Wayfarers' Fire: change hero   ·   Moon Shrine: depart"
 	if is_instance_valid(status_label):
-		var active_name := "Astra Vale · Sword Duelist" if player.character_id == "sword_duelist" else "Moonveil Mage"
-		status_label.text = "ACTIVE WAYFARER: %s   ·   PERMANENT CURRENCY: %d   ·   REGIONS: %d" % [active_name, MoonveilMeta.permanent_currency, MoonveilMeta.unlocked_regions.size()]
+		if _initial_selection_required:
+			status_label.text = "NO WAYFARER CHOSEN YET   ·   VISIT THE FIRE TO BEGIN"
+		else:
+			var active_name := "Astra Vale · Sword Duelist" if player.character_id == "sword_duelist" else "Moonveil Mage"
+			status_label.text = "ACTIVE WAYFARER: %s   ·   PERMANENT CURRENCY: %d   ·   REGIONS: %d" % [active_name, MoonveilMeta.permanent_currency, MoonveilMeta.unlocked_regions.size()]
 
 func _show_message(message: String) -> void:
 	if not is_instance_valid(prompt_label):

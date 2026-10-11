@@ -52,7 +52,7 @@ The current starter counts and healing profiles are a minimal prototype, not a f
 - [x] Keep banked currency and a stack-based shared stash in the account profile, outside character files
 - [x] Add atomic temp-file writes, ID validation, normalized quantities and safe handling for corrupt/unsupported saves
 - [ ] Connect persistent profile progression to live Player stats and decide which values remain run-only
-- [x] Add Soul Knight-style in-world character selection at the Wayfarers' Fire; click the physical character for details, double-click or confirm to switch
+- [x] Add a focused Wayfarers' Fire selection flow: first-time players choose before control unlocks; returning players press E near the fire to reopen it
 - [ ] Integrate shared stash and bank with the item inventory and economy UI when those systems exist
 - [ ] Build only the smallest reusable structure needed for the first two characters; avoid creating a large generic framework before a second character proves the design
 

@@ -13,9 +13,10 @@ flatpak run org.godotengine.Godot --path ~/Projects/AnimeFantasyRPG
 
 ### Refuge
 - WASD — Move around the safe hub.
-- The Mage and Astra Vale are physically present beside the **Wayfarers' Fire**. Click the character in the world, or approach and press E.
-- A single click opens a small contextual detail strip while keeping the Refuge visible. Double-click the same character to switch immediately, or click once and press **Play as this Hero**.
-- Esc or Cancel — close the detail strip without changing the active hero.
+- On a fresh account, the hero is not controllable until the player clicks the **Wayfarers' Fire** (or presses E) and chooses a wayfarer in the focused campfire view.
+- Click a character once to highlight their glowing ring and inspect their role; click the same character again, press **E**, or use the compact **Confirm Wayfarer** button to confirm. **Esc** returns to the Refuge overview.
+- After the first choice, the hero remains controllable in the Refuge. To change heroes later, approach the **Wayfarers' Fire** and press **E**; clicking characters in the overview no longer changes heroes.
+- The active hero is saved in the account profile. Returning from a run or defeat restores the saved hero directly to the Refuge with movement enabled.
 - Go to the **Moon Shrine** and press E — enter Whispering Woods as the selected character.
 
 ### During a run — shared controls

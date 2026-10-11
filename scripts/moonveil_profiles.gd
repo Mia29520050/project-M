@@ -25,6 +25,7 @@ func _default_account() -> Dictionary:
 	return {
 		"schema_version": SCHEMA_VERSION,
 		"active_character_id": DEFAULT_CHARACTER_ID,
+		"has_selected_character": false,
 		"unlocked_character_ids": [DEFAULT_CHARACTER_ID, "sword_duelist"],
 		"banked_currency": 0,
 		"shared_stash": []
@@ -131,6 +132,9 @@ func _normalize_account(saved: Dictionary) -> Dictionary:
 	if not _is_valid_id(active_id) or not unlocked.has(active_id):
 		active_id = DEFAULT_CHARACTER_ID
 	normalized["active_character_id"] = active_id
+	# Existing accounts that already persisted an active ID are treated as having
+	# completed initial selection; fresh in-memory defaults remain unselected.
+	normalized["has_selected_character"] = bool(saved.get("has_selected_character", saved.has("active_character_id")))
 
 	var normalized_stash: Array[Dictionary] = []
 	var saved_stash: Variant = saved.get("shared_stash", [])
@@ -255,7 +259,12 @@ func set_active_character(character_id: String) -> bool:
 		return false
 	var current_id := String(account_data.get("active_character_id", DEFAULT_CHARACTER_ID))
 	if character_id == current_id:
-		return save_active_character()
+		var previous_selected := bool(account_data.get("has_selected_character", false))
+		account_data["has_selected_character"] = true
+		if not save_active_character() or not save_account():
+			account_data["has_selected_character"] = previous_selected
+			return false
+		return true
 	var profile := load_character(character_id)
 	if profile.is_empty():
 		return false
@@ -265,6 +274,7 @@ func set_active_character(character_id: String) -> bool:
 		return false
 	var previous_account: Dictionary = account_data.duplicate(true)
 	account_data["active_character_id"] = character_id
+	account_data["has_selected_character"] = true
 	if not save_account():
 		account_data = previous_account
 		return false
