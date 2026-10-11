@@ -23,6 +23,7 @@ const POTION_RECOVERY := {
 const MANA_REGEN_PER_SEC := 4.0
 const MANA_REGEN_DELAY_AFTER_CAST := 1.5
 const FALL_RESET_Y := -5.0
+var character_id := "moonveil_mage"
 var level := 1
 var xp := 0
 var xp_to_next := 50

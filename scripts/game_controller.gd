@@ -1,6 +1,7 @@
 extends Node3D
 
 const PLAYER_SCENE = preload("res://scenes/player.tscn")
+const DUELIST_SCENE = preload("res://scenes/sword_duelist.tscn")
 const ENEMY_SCENE = preload("res://scenes/enemy.tscn")
 const BOLT_SCENE = preload("res://scenes/magic_bolt.tscn")
 
@@ -58,6 +59,8 @@ func _process(delta: float) -> void:
 	_time += delta
 	_refresh_dodge_hud()
 	_refresh_potion_hud()
+	if is_instance_valid(player) and player.character_id == "sword_duelist" and is_instance_valid(shard_label):
+		shard_label.text = player.call("get_skill_status_text")
 
 func _physics_process(_delta: float) -> void:
 	if get_tree().paused:
@@ -120,7 +123,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("interact"):
 		if not is_instance_valid(player):
 			return
-		if player.has_moonfire_staff:
+		if player.character_id == "sword_duelist":
+			player.call("equip_moonfire_staff")
+		elif player.has_moonfire_staff:
 			player.equip_moonfire_staff()
 		elif player.moon_shards < 3:
 			_show_toast("Collect 3 Moonshards before awakening your staff.")
@@ -285,7 +290,9 @@ func _add_crystal(pos: Vector3, color: Color, height: float) -> void:
 	add_child(base)
 
 func _create_player() -> void:
-	player = PLAYER_SCENE.instantiate()
+	var active_character_id := String(MoonveilProfiles.account_data.get("active_character_id", "moonveil_mage"))
+	var selected_scene: PackedScene = DUELIST_SCENE if active_character_id == "sword_duelist" else PLAYER_SCENE
+	player = selected_scene.instantiate()
 	player.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(player)
 	player.global_position = Vector3(0.0, 0.0, 6.0)
@@ -328,7 +335,7 @@ func _on_enemy_died(xp_reward: int, world_position: Vector3, drops_shard: bool) 
 		_show_toast("QUEST COMPLETE! Moonveil's first clearing is safe.")
 		if is_instance_valid(player):
 			player.gain_xp(35)
-			if not player.has_moonfire_staff and player.moon_shards < 3:
+			if player.character_id != "sword_duelist" and not player.has_moonfire_staff and player.moon_shards < 3:
 				var bonus_shards: int = 3 - player.moon_shards
 				player.add_shard(bonus_shards)
 				_show_toast("Quest reward: %d Moonshards! Return to the Moon Shrine to awaken your staff." % bonus_shards)
@@ -447,7 +454,10 @@ func _build_hud() -> void:
 	controls_panel.offset_right = 470.0
 	controls_panel.offset_top = -90.0
 	controls_panel.offset_bottom = -14.0
-	var controls := _make_label(controls_panel, "WASD Move · Mouse 1 Attack · SPACE Dodge · 1 Minor Potion · 2 Standard · 3 Greater · Q Moonbolt · I Satchel · E Shrine · ESC Pause", 12, Color(0.79, 0.86, 1.0))
+	var controls_text := "WASD Move · Mouse 1 Attack · SPACE Dodge · 1/2/3 Healing · Q Moonbolt · I Satchel · E Shrine · ESC Pause"
+	if player.character_id == "sword_duelist":
+		controls_text = "WASD Move · Mouse 1 3-Hit Combo · SPACE Dodge · Q Crescent Lunge · 1/2/3 Healing · I Satchel · ESC Pause"
+	var controls := _make_label(controls_panel, controls_text, 12, Color(0.79, 0.86, 1.0))
 	controls.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	controls.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
@@ -480,7 +490,10 @@ func _build_hud() -> void:
 	_make_label(inventory_box, "✦  ADVENTURER'S SATCHEL", 18, Color(0.78, 0.85, 1.0))
 	inventory_label = _make_label(inventory_box, "", 14)
 	inventory_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var inventory_hint := _make_label(inventory_box, "Potions recover HP gradually: 1 Minor (+24 over 3s), 2 Standard (+45 over 4s), 3 Greater (+70 over 5s). Only one recovery can run at a time; being hit does not interrupt it for now.\nQ: Moonbolt auto-locks the nearest Voidling within 18m (24 base damage, 15 Mana).\nSPACE: dodge; charges recharge over time. E: awaken the staff after collecting 3 Moonshards. I or ESC closes this satchel.", 12, Color(0.67, 0.80, 0.94))
+	var inventory_text := "Potions recover HP gradually: 1 Minor (+24 over 3s), 2 Standard (+45 over 4s), 3 Greater (+70 over 5s). Only one recovery can run at a time; being hit does not interrupt it for now.\nQ: Moonbolt targets the nearest Voidling within 18m (24 base damage, 15 Mana).\nSPACE: dodge; charges recharge over time. E: awaken the staff after collecting 3 Moonshards. I or ESC closes this satchel."
+	if player.character_id == "sword_duelist":
+		inventory_text = "Potions recover HP gradually: 1 Minor (+24 over 3s), 2 Standard (+45 over 4s), 3 Greater (+70 over 5s). Only one recovery runs at a time.\nMouse 1: a three-strike melee chain (16 / 20 / 28 damage).\nQ: Crescent Lunge spends 20 stamina, dashes through combat and has a 4.5-second cooldown. SPACE: defensive dodge. I or ESC closes this satchel."
+	var inventory_hint := _make_label(inventory_box, inventory_text, 12, Color(0.67, 0.80, 0.94))
 	inventory_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	inventory_panel.hide()
 
@@ -558,20 +571,35 @@ func _refresh_hud() -> void:
 	xp_bar.value = player.xp
 	hp_label.text = "HP  %d / %d" % [player.hp, player.max_hp]
 	mana_label.text = "MANA  %d / %d" % [player.mana, player.max_mana]
-	level_label.text = "LEVEL %d  ·  %s" % [player.level, "Moonfire Adept" if player.has_moonfire_staff else "Apprentice"]
-	weapon_label.text = "Weapon: %s  ·  Strike %d / Moonbolt %d" % [player.weapon_name, player.base_damage + player.weapon_bonus, player.magic_damage + player.weapon_bonus * 2]
-	shard_label.text = "Moonshards: %d / 3" % player.moon_shards
+	if player.character_id == "sword_duelist":
+		level_label.text = "LEVEL %d  ·  Sword Duelist" % player.level
+		hp_label.text = "HP  %d / %d" % [player.hp, player.max_hp]
+		mana_label.text = "STAMINA  %d / %d" % [player.mana, player.max_mana]
+		weapon_label.text = "Weapon: Training Sword  ·  Combo 16 / 20 / 28"
+		shard_label.text = player.call("get_skill_status_text")
+	else:
+		level_label.text = "LEVEL %d  ·  %s" % [player.level, "Moonfire Adept" if player.has_moonfire_staff else "Apprentice"]
+		mana_label.text = "MANA  %d / %d" % [player.mana, player.max_mana]
+		weapon_label.text = "Weapon: %s  ·  Strike %d / Moonbolt %d" % [player.weapon_name, player.base_damage + player.weapon_bonus, player.magic_damage + player.weapon_bonus * 2]
+		shard_label.text = "Moonshards: %d / 3" % player.moon_shards
 	quest_label.text = "Quest complete!" if quest_completed else "Defeat 5 Voidlings  (%d/5)" % mini(defeated_count, 5)
 	enemy_label.text = "%d Voidlings in the clearing" % get_tree().get_nodes_in_group("enemies").size()
 	_refresh_dodge_hud()
 	if inventory_panel != null:
-		inventory_label.text = "Level: %d\nHP: %d / %d\nMana: %d / %d\nXP: %d / %d\n\nWeapon: %s\nStrike damage: %d\nMoonbolt damage: %d\nMoonshards: %d / 3\nPotions — Minor: %d · Standard: %d · Greater: %d%s" % [
-			player.level, player.hp, player.max_hp, player.mana, player.max_mana,
-			player.xp, player.xp_to_next, player.weapon_name, player.base_damage + player.weapon_bonus,
-			player.magic_damage + player.weapon_bonus * 2, player.moon_shards,
-			player.minor_potions, player.standard_potions, player.greater_potions,
-			"\nHealing in progress: %.1fs left" % player._healing_time_remaining if player._healing_active else ""
-		]
+		if player.character_id == "sword_duelist":
+			inventory_label.text = "Level: %d\nHP: %d / %d\nStamina: %d / %d\nXP: %d / %d\n\nWeapon: Training Sword\nCombo damage: 16 / 20 / 28\nCrescent Lunge: 30 damage · 20 stamina · 4.5s cooldown\nPotions — Minor: %d · Standard: %d · Greater: %d%s" % [
+				player.level, player.hp, player.max_hp, player.mana, player.max_mana,
+				player.xp, player.xp_to_next, player.minor_potions, player.standard_potions, player.greater_potions,
+				"\nHealing in progress: %.1fs left" % player._healing_time_remaining if player._healing_active else ""
+			]
+		else:
+			inventory_label.text = "Level: %d\nHP: %d / %d\nMana: %d / %d\nXP: %d / %d\n\nWeapon: %s\nStrike damage: %d\nMoonbolt damage: %d\nMoonshards: %d / 3\nPotions — Minor: %d · Standard: %d · Greater: %d%s" % [
+				player.level, player.hp, player.max_hp, player.mana, player.max_mana,
+				player.xp, player.xp_to_next, player.weapon_name, player.base_damage + player.weapon_bonus,
+				player.magic_damage + player.weapon_bonus * 2, player.moon_shards,
+				player.minor_potions, player.standard_potions, player.greater_potions,
+				"\nHealing in progress: %.1fs left" % player._healing_time_remaining if player._healing_active else ""
+			]
 
 func _show_toast(message: String) -> void:
 	if not is_instance_valid(toast_panel):

@@ -52,20 +52,21 @@ The current starter counts and healing profiles are a minimal prototype, not a f
 - [x] Keep banked currency and a stack-based shared stash in the account profile, outside character files
 - [x] Add atomic temp-file writes, ID validation, normalized quantities and safe handling for corrupt/unsupported saves
 - [ ] Connect persistent profile progression to live Player stats and decide which values remain run-only
-- [ ] Add a character-selection flow that loads one character profile without copying account-level data
+- [x] Add a Refuge character-selection flow at the Wayfarers' Fire; double-click or select + confirm changes the active character
 - [ ] Integrate shared stash and bank with the item inventory and economy UI when those systems exist
 - [ ] Build only the smallest reusable structure needed for the first two characters; avoid creating a large generic framework before a second character proves the design
 
 `MoonveilProfiles` is a persistence/ownership scaffold, not a finished character selector or live banking system. Current run stats, Moonshards, potions and temporary weapon upgrades still reset with each new Player. `MoonveilMeta` remains unchanged and continues to store its existing long-term progression fields. See `docs/SAVE_SCHEMA.md` for the exact v1 contract.
 
-## Milestone D — Second character prototype (after Milestone A is solid)
-- [ ] Prototype a **mobile sword duelist** as the initial candidate to contrast with the current Moonveil mage
-- [ ] Give the duelist a distinct combat rhythm built around close-range attack chains and mobility, rather than simply reskinning Moonbolt
-- [ ] Reuse appropriate shared systems (movement, health, enemy targeting, damage/death flow) while keeping that character's skills and stats independent
-- [ ] Verify the second character can be added without rewriting the enemy controller or duplicating the entire run scene
-- [ ] Playtest both characters against the same Voidling encounters and confirm their choices feel meaningfully different
+## Milestone D — Second character prototype (implemented; balance needs playtesting)
+- [x] Add **Astra Vale, Sword Duelist** as a second playable character with separate procedural model and weapon
+- [x] Give the duelist a three-hit close-range chain (16 / 20 / 28 base damage) and Q **Crescent Lunge** (dash strike, 20 stamina, 4.5-second cooldown)
+- [x] Reuse the shared movement, health, dodge, hit flash, potions, Voidling AI, damage/death flow and run scene
+- [x] Give the player HUD and help text character-specific skill/weapon messaging
+- [x] Make the active Refuge selection drive which character scene enters Whispering Woods
+- [ ] Playtest both characters against the same Voidling encounters and tune damage, reach, mobility and stamina in GUI
 
-The second character's weapon, exact skills, visuals and balance are provisional. Implement this milestone only after the existing mage's combat feedback and basic loop feel good.
+Both models are procedural placeholders rather than rigged art assets. The duelist's numbers are a first-pass prototype, not final balance; profile saves for long-term live stats/equipment remain a separate integration task.
 
 ## Milestone 2 — RPG foundations
 - [ ] Data-driven items, stats and equipment slots (weapon, head, body, accessory)

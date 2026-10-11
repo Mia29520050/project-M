@@ -15,11 +15,9 @@ Path: `user://moonveil_account.json`
 {
   "schema_version": 1,
   "active_character_id": "moonveil_mage",
-  "unlocked_character_ids": ["moonveil_mage"],
+  "unlocked_character_ids": ["moonveil_mage", "sword_duelist"],
   "banked_currency": 0,
-  "shared_stash": [
-    { "item_id": "minor_potion", "quantity": 2 }
-  ]
+  "shared_stash": []
 }
 ```
 
@@ -48,18 +46,18 @@ One file per character: `user://moonveil_characters/<character_id>.json`. Charac
 }
 ```
 
-Each profile owns character-specific progression, attributes, skills, equipment and carried currency. Adding a character does not copy account bank funds or the shared stash into its file. The current `sword_duelist` starter template is only a provisional data placeholder to test independent class profiles; it is not yet an available playable character, and its balance is not final.
+Each profile owns character-specific progression, attributes, skills, equipment and carried currency. Adding a character does not copy account bank funds or the shared stash into its file. The `sword_duelist` profile is now used by the playable Astra Vale prototype; its starter values remain provisional and are not yet connected to persistent live-run stats.
 
 ## Safety and compatibility
 
 - Writes use a temporary file followed by an atomic rename in the same directory.
 - Unsupported versions, invalid JSON and character ID mismatches are left untouched on disk; defaults are used only in memory and a warning is emitted.
 - IDs, currencies, quantities and core numeric progression values are validated and normalized on load.
-- This v1 scaffold has not yet been wired to the live Player stats, inventory UI, a character-select screen, or an in-game banking/shop UI. These connections come after schema tests and review.
+- The Refuge's Wayfarers' Fire now provides a character-selection screen and persists the active character ID. The live Player's run level/XP, HP, current equipment upgrades, potions, and Moonshards are still prototype-scoped; bank/stash UI and an in-game economy are not yet implemented.
 - No migration is applied to `moonveil_meta.json`; its existing version-1 content remains separate and compatible.
 
 ## Next integration steps
 
-1. Test account/character read-write round trips, separate character files, shared bank/stash and invalid/corrupt-save handling.
-2. Add the smallest character-selection flow while ensuring it only swaps the selected profile, not shared account data.
-3. Connect persistent character progression only after deciding which of the current run-only values become long-term character values.
+1. Connect character profile progression and attributes to the live Player only after deciding which current run-only values become long-term character values.
+2. Integrate shared stash and bank with the inventory/economy when those systems are implemented.
+3. Playtest both character classes and tune their separate skill/stamina balance.

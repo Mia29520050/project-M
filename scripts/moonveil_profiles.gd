@@ -5,8 +5,8 @@ const CHARACTER_DIRECTORY := "user://moonveil_characters"
 const SCHEMA_VERSION := 1
 const DEFAULT_CHARACTER_ID := "moonveil_mage"
 
-# This is a storage scaffold only. The current playable run still initializes its
-# temporary level, XP, equipment and potion stock on the Player node.
+# Persistent profile ownership is separate from the current run: temporary level, XP,
+# equipment and potion stock still initialize on the selected Player scene.
 var account_save_path := ACCOUNT_SAVE_PATH
 var character_directory := CHARACTER_DIRECTORY
 var account_data: Dictionary = {}
@@ -25,7 +25,7 @@ func _default_account() -> Dictionary:
 	return {
 		"schema_version": SCHEMA_VERSION,
 		"active_character_id": DEFAULT_CHARACTER_ID,
-		"unlocked_character_ids": [DEFAULT_CHARACTER_ID],
+		"unlocked_character_ids": [DEFAULT_CHARACTER_ID, "sword_duelist"],
 		"banked_currency": 0,
 		"shared_stash": []
 	}
@@ -35,7 +35,7 @@ func default_character_profile(
 	display_name: String = "Moonveil Mage",
 	class_id: String = "moon_mage"
 ) -> Dictionary:
-	# Starter templates only: the sword duelist's balance is provisional and not yet playable.
+	# Starter templates define character-specific save defaults; live run stats are still prototype-scoped.
 	var attributes := {
 		"max_hp": 100,
 		"max_mana": 60,
@@ -122,6 +122,9 @@ func _normalize_account(saved: Dictionary) -> Dictionary:
 				unlocked.append(item)
 	if not unlocked.has(DEFAULT_CHARACTER_ID):
 		unlocked.push_front(DEFAULT_CHARACTER_ID)
+	# The first playable roster ships with the Mage and Sword Duelist available.
+	if not unlocked.has("sword_duelist"):
+		unlocked.append("sword_duelist")
 	normalized["unlocked_character_ids"] = unlocked
 
 	var active_id := String(saved.get("active_character_id", DEFAULT_CHARACTER_ID))
@@ -154,7 +157,11 @@ func load_character(character_id: String) -> Dictionary:
 		return {}
 	var path := _character_path(character_id)
 	if not FileAccess.file_exists(path):
-		return default_character_profile() if character_id == DEFAULT_CHARACTER_ID else {}
+		if character_id == DEFAULT_CHARACTER_ID:
+			return default_character_profile()
+		if character_id == "sword_duelist":
+			return default_character_profile("sword_duelist", "Astra Vale", "sword_duelist")
+		return {}
 
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
