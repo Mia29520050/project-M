@@ -34,14 +34,17 @@
 
 **Acceptance checks:** melee and Moonbolt each trigger the enemy's white flash and impact sparks; impact meshes fade and clean up, with active effects capped; player damage triggers a brief white overlay and 0.72 seconds of invulnerability; repeat damage is ignored during that window; enemy body collisions, visibility and original materials restore afterward; headless tests pass and effects remain readable in a GUI playtest.
 
-## Milestone B — Healing items and deliberate recovery (future plan; not implemented)
-- [ ] Healing potions restore HP gradually over time instead of healing the full amount immediately
-- [ ] Potion quality/grade determines its recovery profile, including how much HP is recovered and over what duration
-- [ ] Tune recovery so using a potion during danger is a meaningful decision: players should make space, dodge and look for a safer moment to begin recovering
-- [ ] Later decide whether taking damage interrupts, delays or leaves the ongoing recovery unchanged; do not assume this rule before playtesting
-- [ ] Add clear UI feedback for an ongoing recovery and its remaining effect only when the potion system is implemented
+## Milestone B — Healing items and deliberate recovery (prototype implemented; balance needs playtesting)
+- [x] Healing potions restore HP gradually over time instead of healing the full amount immediately
+- [x] Minor, Standard and Greater grades use distinct recovery profiles: 24 HP / 3 seconds, 45 HP / 4 seconds, and 70 HP / 5 seconds (capped by missing HP)
+- [x] Add simple run-scoped starter stock: 2 Minor, 1 Standard and 1 Greater potion; number keys 1/2/3 use the matching grade
+- [x] Prevent potion stacking and prevent wasting a potion at full HP or when its grade is out of stock
+- [x] Show potion counts and the active recovery countdown in the HUD and satchel
+- [ ] Playtest whether the recovery pace encourages players to make space and find a safer moment before drinking
+- [ ] Decide after playtesting whether taking damage interrupts, delays or leaves ongoing recovery unchanged; this prototype currently lets recovery continue after a hit
+- [ ] Add ways to obtain more potions through gameplay when loot/reward systems are designed
 
-This is a design note for a later milestone. Do not implement a potion inventory, rarity system or recovery framework during the current combat-feedback pass.
+The current starter counts and healing profiles are a minimal prototype, not a final economy or rarity system. Potion stock resets when a new Player/run is created. Continue tuning only after a real GUI playtest.
 
 ## Milestone C — Character-specific builds and shared account storage (future architecture plan)
 - [ ] Keep each character's own base stats, growth, skills, animations/VFX, combat mechanics and character-specific equipment/progression separate

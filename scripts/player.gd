@@ -13,6 +13,13 @@ const HIT_INVULNERABILITY_DURATION := 0.72
 const PLAYER_HIT_FLASH_DURATION := 0.12
 const HIT_BLINK_INTERVAL := 0.075
 const GRAVITY := 22.0
+
+enum PotionGrade { MINOR, STANDARD, GREATER }
+const POTION_RECOVERY := {
+	PotionGrade.MINOR: {"name": "Minor", "amount": 24, "duration": 3.0},
+	PotionGrade.STANDARD: {"name": "Standard", "amount": 45, "duration": 4.0},
+	PotionGrade.GREATER: {"name": "Greater", "amount": 70, "duration": 5.0}
+}
 const MANA_REGEN_PER_SEC := 4.0
 const MANA_REGEN_DELAY_AFTER_CAST := 1.5
 const FALL_RESET_Y := -5.0
@@ -21,6 +28,15 @@ var xp := 0
 var xp_to_next := 50
 var max_hp := 100
 var hp := 100
+# Consumables are run-scoped for this prototype; creating a new run creates a fresh loadout.
+var minor_potions := 2
+var standard_potions := 1
+var greater_potions := 1
+var _healing_active := false
+var _healing_total_amount := 0
+var _healing_applied_amount := 0
+var _healing_total_duration := 0.0
+var _healing_time_remaining := 0.0
 var max_mana := 60
 var mana := 60
 var base_damage := 12
@@ -213,6 +229,8 @@ func _physics_process(delta: float) -> void:
 		velocity.z = move_toward(velocity.z, 0.0, WALK_SPEED * delta * 3.0)
 		return
 
+	_update_healing(delta)
+
 	if _mana_regen_delay > 0.0:
 		_mana_regen_delay = maxf(0.0, _mana_regen_delay - delta)
 	elif mana < max_mana:
@@ -261,6 +279,81 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	if _dodge_timer <= 0.0 and _invulnerability_timer <= 0.0:
 		_end_dodge_collision_phase()
+
+func _update_healing(delta: float) -> void:
+	if not _healing_active:
+		return
+	if _defeated or hp >= max_hp:
+		_healing_active = false
+		_healing_time_remaining = 0.0
+		stats_changed.emit()
+		return
+
+	var elapsed_before := _healing_total_duration - _healing_time_remaining
+	var elapsed_now := minf(_healing_total_duration, elapsed_before + delta)
+	_healing_time_remaining = maxf(0.0, _healing_total_duration - elapsed_now)
+	var target_restored := int(floor(float(_healing_total_amount) * elapsed_now / _healing_total_duration))
+	if _healing_time_remaining <= 0.0:
+		target_restored = _healing_total_amount
+	var restore_now := maxi(0, target_restored - _healing_applied_amount)
+	_healing_applied_amount = target_restored
+	if restore_now > 0:
+		var actual_restore := mini(restore_now, max_hp - hp)
+		hp += actual_restore
+		if actual_restore > 0:
+			stats_changed.emit()
+	if _healing_time_remaining <= 0.0:
+		_healing_active = false
+		notification_requested.emit("Potion recovery complete.")
+		stats_changed.emit()
+
+func use_healing_potion(grade: int) -> void:
+	if _defeated:
+		return
+	if _healing_active:
+		notification_requested.emit("A potion is already restoring your HP.")
+		return
+	if hp >= max_hp:
+		notification_requested.emit("Your HP is already full.")
+		return
+	if not POTION_RECOVERY.has(grade):
+		return
+
+	var profile: Dictionary = POTION_RECOVERY[grade]
+	var available := 0
+	match grade:
+		PotionGrade.MINOR: available = minor_potions
+		PotionGrade.STANDARD: available = standard_potions
+		PotionGrade.GREATER: available = greater_potions
+	if available <= 0:
+		notification_requested.emit("No %s potions left." % profile["name"])
+		return
+
+	match grade:
+		PotionGrade.MINOR: minor_potions -= 1
+		PotionGrade.STANDARD: standard_potions -= 1
+		PotionGrade.GREATER: greater_potions -= 1
+	_healing_total_amount = mini(int(profile["amount"]), max_hp - hp)
+	_healing_applied_amount = 0
+	_healing_total_duration = float(profile["duration"])
+	_healing_time_remaining = _healing_total_duration
+	_healing_active = _healing_total_amount > 0
+	notification_requested.emit("Used %s Potion: up to %d HP over %.0f seconds. The recovery continues if you are hit." % [profile["name"], _healing_total_amount, _healing_total_duration])
+	stats_changed.emit()
+
+func add_healing_potion(grade: int, amount: int = 1) -> void:
+	if amount <= 0:
+		return
+	match grade:
+		PotionGrade.MINOR: minor_potions += amount
+		PotionGrade.STANDARD: standard_potions += amount
+		PotionGrade.GREATER: greater_potions += amount
+	stats_changed.emit()
+
+func get_potion_status_text() -> String:
+	if _healing_active:
+		return "HEALING %.1fs  ·  1:%d  2:%d  3:%d" % [_healing_time_remaining, minor_potions, standard_potions, greater_potions]
+	return "POTIONS  1:%d  2:%d  3:%d" % [minor_potions, standard_potions, greater_potions]
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _defeated or controls_locked:

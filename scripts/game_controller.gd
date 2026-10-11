@@ -14,6 +14,7 @@ var level_label: Label
 var hp_label: Label
 var mana_label: Label
 var dodge_label: Label
+var potion_label: Label
 var _inventory_paused := false
 var weapon_label: Label
 var shard_label: Label
@@ -56,6 +57,7 @@ func _process(delta: float) -> void:
 		return
 	_time += delta
 	_refresh_dodge_hud()
+	_refresh_potion_hud()
 
 func _physics_process(_delta: float) -> void:
 	if get_tree().paused:
@@ -102,6 +104,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if get_tree().paused:
+		return
+	if is_instance_valid(player) and event.is_action_pressed("potion_minor"):
+		player.call("use_healing_potion", 0)
+		get_viewport().set_input_as_handled()
+		return
+	if is_instance_valid(player) and event.is_action_pressed("potion_standard"):
+		player.call("use_healing_potion", 1)
+		get_viewport().set_input_as_handled()
+		return
+	if is_instance_valid(player) and event.is_action_pressed("potion_greater"):
+		player.call("use_healing_potion", 2)
+		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("interact"):
 		if not is_instance_valid(player):
@@ -390,7 +404,7 @@ func _build_hud() -> void:
 	full.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_layer.add_child(full)
 
-	var stats_panel := _make_panel(full, Vector2(326, 216))
+	var stats_panel := _make_panel(full, Vector2(326, 240))
 	stats_panel.position = Vector2(22, 22)
 	var stats_box := VBoxContainer.new()
 	stats_box.add_theme_constant_override("separation", 5)
@@ -404,6 +418,7 @@ func _build_hud() -> void:
 	_make_label(stats_box, "EXPERIENCE", 11, Color(0.81, 0.81, 0.94))
 	xp_bar = _make_bar(stats_box, Color(0.69, 0.48, 1.0))
 	dodge_label = _make_label(stats_box, "DODGE  2 / 2  ·  READY", 12, Color(0.78, 0.88, 1.0))
+	potion_label = _make_label(stats_box, "POTIONS  1:2  2:1  3:0", 12, Color(0.86, 0.91, 0.74))
 
 	var quest_panel := _make_panel(full, Vector2(340, 128))
 	quest_panel.anchor_left = 1.0
@@ -432,7 +447,7 @@ func _build_hud() -> void:
 	controls_panel.offset_right = 470.0
 	controls_panel.offset_top = -90.0
 	controls_panel.offset_bottom = -14.0
-	var controls := _make_label(controls_panel, "WASD Move  ·  Mouse 1 Attack  ·  SPACE Dodge (charges shown top-left)  ·  Q Moonbolt (auto-lock nearest Voidling within 18m; projectile homes in)  ·  I Inventory  ·  E Shrine  ·  ESC Pause", 12, Color(0.79, 0.86, 1.0))
+	var controls := _make_label(controls_panel, "WASD Move · Mouse 1 Attack · SPACE Dodge · 1 Minor Potion · 2 Standard · 3 Greater · Q Moonbolt · I Satchel · E Shrine · ESC Pause", 12, Color(0.79, 0.86, 1.0))
 	controls.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	controls.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
@@ -465,7 +480,7 @@ func _build_hud() -> void:
 	_make_label(inventory_box, "✦  ADVENTURER'S SATCHEL", 18, Color(0.78, 0.85, 1.0))
 	inventory_label = _make_label(inventory_box, "", 14)
 	inventory_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var inventory_hint := _make_label(inventory_box, "Q: Moonbolt automatically locks onto the nearest Voidling within 18m; the projectile chases that target (24 base damage, 15 Mana).\nSPACE: spend one of 2 dodge charges; charges recharge over time.\nE: awaken the staff at the Moon Shrine after collecting 3 Moonshards.\nI or ESC closes this satchel. The entire game is paused while it is open.", 12, Color(0.67, 0.80, 0.94))
+	var inventory_hint := _make_label(inventory_box, "Potions recover HP gradually: 1 Minor (+24 over 3s), 2 Standard (+45 over 4s), 3 Greater (+70 over 5s). Only one recovery can run at a time; being hit does not interrupt it for now.\nQ: Moonbolt auto-locks the nearest Voidling within 18m (24 base damage, 15 Mana).\nSPACE: dodge; charges recharge over time. E: awaken the staff after collecting 3 Moonshards. I or ESC closes this satchel.", 12, Color(0.67, 0.80, 0.94))
 	inventory_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	inventory_panel.hide()
 
@@ -519,6 +534,11 @@ func _show_death_panel() -> void:
 	if is_instance_valid(death_panel):
 		death_panel.show()
 
+func _refresh_potion_hud() -> void:
+	if not is_instance_valid(player) or not is_instance_valid(potion_label):
+		return
+	potion_label.text = player.call("get_potion_status_text")
+
 func _refresh_dodge_hud() -> void:
 	if not is_instance_valid(player) or not is_instance_valid(dodge_label):
 		return
@@ -545,10 +565,12 @@ func _refresh_hud() -> void:
 	enemy_label.text = "%d Voidlings in the clearing" % get_tree().get_nodes_in_group("enemies").size()
 	_refresh_dodge_hud()
 	if inventory_panel != null:
-		inventory_label.text = "Level: %d\nHP: %d / %d\nMana: %d / %d\nXP: %d / %d\n\nWeapon: %s\nStrike damage: %d\nMoonbolt damage: %d\nMoonshards: %d / 3" % [
+		inventory_label.text = "Level: %d\nHP: %d / %d\nMana: %d / %d\nXP: %d / %d\n\nWeapon: %s\nStrike damage: %d\nMoonbolt damage: %d\nMoonshards: %d / 3\nPotions — Minor: %d · Standard: %d · Greater: %d%s" % [
 			player.level, player.hp, player.max_hp, player.mana, player.max_mana,
 			player.xp, player.xp_to_next, player.weapon_name, player.base_damage + player.weapon_bonus,
-			player.magic_damage + player.weapon_bonus * 2, player.moon_shards
+			player.magic_damage + player.weapon_bonus * 2, player.moon_shards,
+			player.minor_potions, player.standard_potions, player.greater_potions,
+			"\nHealing in progress: %.1fs left" % player._healing_time_remaining if player._healing_active else ""
 		]
 
 func _show_toast(message: String) -> void:
