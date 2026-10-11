@@ -116,8 +116,8 @@ func _ready() -> void:
 	# Outline the actual melee attack radius so players can read the threatened area.
 	ring_mesh.inner_radius = ATTACK_RANGE - 0.12
 	ring_mesh.outer_radius = ATTACK_RANGE
-	ring_mesh.rings = 8
-	ring_mesh.ring_segments = 32
+	ring_mesh.rings = 64
+	ring_mesh.ring_segments = 12
 	_warning_ring.mesh = ring_mesh
 	var ring_material := StandardMaterial3D.new()
 	ring_material.albedo_color = Color(1.0, 0.18, 0.06, 0.9)
@@ -138,8 +138,8 @@ func _ready() -> void:
 	var countdown_mesh := TorusMesh.new()
 	countdown_mesh.inner_radius = COUNTDOWN_RING_INNER_RADIUS
 	countdown_mesh.outer_radius = COUNTDOWN_RING_OUTER_RADIUS
-	countdown_mesh.rings = 8
-	countdown_mesh.ring_segments = 32
+	countdown_mesh.rings = 64
+	countdown_mesh.ring_segments = 12
 	_countdown_ring.mesh = countdown_mesh
 	_countdown_material = StandardMaterial3D.new()
 	_countdown_material.albedo_color = Color(1.0, 0.72, 0.08, 0.95)
