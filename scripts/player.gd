@@ -331,6 +331,9 @@ func gain_xp(amount: int) -> void:
 		notification_requested.emit("+%d XP" % amount)
 	stats_changed.emit()
 
+func is_defeated() -> bool:
+	return _defeated
+
 func take_damage(amount: int) -> void:
 	if _defeated or _invulnerability_timer > 0.0: return
 	hp = maxi(0, hp - amount)

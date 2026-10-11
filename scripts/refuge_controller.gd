@@ -9,6 +9,7 @@ var player: Node3D
 var camera: Camera3D
 var prompt_label: Label
 var status_label: Label
+var pause_label: Label
 var _transitioning := false
 
 func _ready() -> void:
@@ -33,6 +34,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_tree().paused = not get_tree().paused
 		if is_instance_valid(player):
 			player.controls_locked = get_tree().paused
+		if is_instance_valid(pause_label):
+			pause_label.visible = get_tree().paused
 		get_viewport().set_input_as_handled()
 		return
 	if get_tree().paused or _transitioning:
@@ -63,7 +66,7 @@ func _start_run() -> void:
 func _create_player() -> void:
 	player = PLAYER_SCENE.instantiate() as CharacterBody3D
 	player.process_mode = Node.PROCESS_MODE_PAUSABLE
-	player.position = Vector3(0.0, 0.0, 3.4)
+	player.position = Vector3(0.0, 0.0, 7.0)
 	player.notification_requested.connect(_show_message)
 	add_child(player)
 
@@ -246,6 +249,23 @@ func _build_hud() -> void:
 	status_label.add_theme_font_size_override("font_size", 12)
 	status_label.add_theme_color_override("font_color", Color(0.75, 0.84, 1.0))
 	full.add_child(status_label)
+
+	pause_label = Label.new()
+	pause_label.text = "PAUSED"
+	pause_label.anchor_left = 0.5
+	pause_label.anchor_right = 0.5
+	pause_label.anchor_top = 0.5
+	pause_label.anchor_bottom = 0.5
+	pause_label.offset_left = -150.0
+	pause_label.offset_right = 150.0
+	pause_label.offset_top = -40.0
+	pause_label.offset_bottom = 40.0
+	pause_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pause_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	pause_label.add_theme_font_size_override("font_size", 34)
+	pause_label.add_theme_color_override("font_color", Color(0.78, 0.88, 1.0))
+	full.add_child(pause_label)
+	pause_label.hide()
 
 func _refresh_prompt() -> void:
 	if not is_instance_valid(prompt_label) or not is_instance_valid(player):

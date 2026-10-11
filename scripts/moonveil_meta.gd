@@ -1,6 +1,7 @@
 extends Node
 
 const SAVE_PATH := "user://moonveil_meta.json"
+const TEMP_SAVE_PATH := "user://moonveil_meta.json.tmp"
 const DEFAULT_REGION := "whispering_woods"
 
 # Long-term progression lives outside a run. Current combat XP, level and Moonshards
@@ -54,11 +55,18 @@ func save_progress() -> void:
 		"story_flags": story_flags,
 		"unlocked_regions": unlocked_regions,
 	}
-	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	var file := FileAccess.open(TEMP_SAVE_PATH, FileAccess.WRITE)
 	if file == null:
-		push_error("Moonveil could not save long-term progression: %s" % FileAccess.get_open_error())
+		push_error("Moonveil could not open temporary progression save: %s" % FileAccess.get_open_error())
 		return
 	file.store_string(JSON.stringify(data, "\t"))
+	file.flush()
+	file.close()
+	var temporary_absolute := ProjectSettings.globalize_path(TEMP_SAVE_PATH)
+	var save_absolute := ProjectSettings.globalize_path(SAVE_PATH)
+	var rename_error: Error = DirAccess.rename_absolute(temporary_absolute, save_absolute)
+	if rename_error != OK:
+		push_error("Moonveil could not replace long-term progression save (error %d)." % rename_error)
 
 func load_progress() -> void:
 	if not FileAccess.file_exists(SAVE_PATH):

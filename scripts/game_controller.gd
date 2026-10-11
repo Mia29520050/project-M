@@ -69,6 +69,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.echo:
 		return
 
+	# Ignore pause/inventory input once the run has ended and the death banner is active.
+	if is_instance_valid(player) and player.has_method("is_defeated") and bool(player.call("is_defeated")):
+		if event.is_action_pressed("pause") or event.is_action_pressed("inventory"):
+			get_viewport().set_input_as_handled()
+			return
+
 	# ESC always exits the inventory first; otherwise it toggles the pause menu.
 	if event.is_action_pressed("pause"):
 		if _inventory_paused:
@@ -505,7 +511,7 @@ func _build_hud() -> void:
 	death_panel.add_child(death_box)
 	var death_title := _make_label(death_box, "YOU HAVE FALLEN", 25, Color(1.0, 0.47, 0.61))
 	death_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var death_subtitle := _make_label(death_box, "The clearing is being restored…", 14, Color(0.94, 0.86, 0.91))
+	var death_subtitle := _make_label(death_box, "Returning to the Refuge…", 14, Color(0.94, 0.86, 0.91))
 	death_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	death_panel.hide()
 
