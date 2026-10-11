@@ -10,6 +10,9 @@ const BASE_BODY_COLOR := Color(0.49, 0.20, 0.56)
 const WINDUP_BODY_COLOR := Color(1.0, 0.32, 0.09)
 const HIT_FLASH_COLOR := Color(1.0, 1.0, 1.0)
 const HIT_FLASH_DURATION := 0.14
+const COUNTDOWN_RING_INNER_RADIUS := 0.72
+const COUNTDOWN_RING_OUTER_RADIUS := 0.88
+const COUNTDOWN_RING_START_SCALE := 0.12
 var player_ref: Node3D
 var spawn_position: Vector3 = Vector3.ZERO
 var max_hp := 42
@@ -133,8 +136,8 @@ func _ready() -> void:
 	_countdown_ring = MeshInstance3D.new()
 	_countdown_ring.name = "AttackCountdownRing"
 	var countdown_mesh := TorusMesh.new()
-	countdown_mesh.inner_radius = 0.72
-	countdown_mesh.outer_radius = 0.88
+	countdown_mesh.inner_radius = COUNTDOWN_RING_INNER_RADIUS
+	countdown_mesh.outer_radius = COUNTDOWN_RING_OUTER_RADIUS
 	countdown_mesh.rings = 8
 	countdown_mesh.ring_segments = 32
 	_countdown_ring.mesh = countdown_mesh
@@ -191,8 +194,9 @@ func _physics_process(delta: float) -> void:
 			_warning_label.modulate = urgency
 			_warning_label.scale = Vector3.ONE * (0.85 + 0.45 * progress + final_pulse)
 		if is_instance_valid(_countdown_ring):
-			# Outer ring shows reach; this inner ring shrinking toward the center shows time remaining.
-			var countdown_scale := maxf(0.12, 1.0 - progress * 0.88)
+			# Outer ring shows reach; this inner ring expands toward its edge to show time remaining.
+			# Expand outward from the center to the edge of the fixed danger radius as impact approaches.
+			var countdown_scale := lerpf(COUNTDOWN_RING_START_SCALE, ATTACK_RANGE / COUNTDOWN_RING_OUTER_RADIUS, progress)
 			_countdown_ring.scale = Vector3(countdown_scale, 1.0, countdown_scale)
 			var countdown_color := Color(1.0, 0.72, 0.08).lerp(Color(1.0, 0.035, 0.02), progress)
 			countdown_color.a = 0.95
@@ -233,7 +237,7 @@ func _physics_process(delta: float) -> void:
 				_warning_ring.scale = Vector3.ONE
 			if is_instance_valid(_countdown_ring):
 				_countdown_ring.show()
-				_countdown_ring.scale = Vector3.ONE
+				_countdown_ring.scale = Vector3(COUNTDOWN_RING_START_SCALE, 1.0, COUNTDOWN_RING_START_SCALE)
 				_countdown_material.albedo_color = Color(1.0, 0.72, 0.08, 0.95)
 				_countdown_material.emission = Color(1.0, 0.55, 0.03)
 				_countdown_material.emission_energy_multiplier = 1.6

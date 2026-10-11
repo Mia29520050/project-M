@@ -21,7 +21,7 @@
 - [ ] Add lightweight, low-cost impact VFX where they improve attack readability; avoid expensive effects until performance is measured
 - [ ] Playtest enemy telegraph clarity, damage feedback, dodge response and camera framing before adding enemy archetypes
 - [x] Show a fixed outer attack-range ring during wind-up, sized to the actual 1.35-unit damage range
-- [x] Add a separate inner countdown ring that shrinks and shifts from amber to red as the strike approaches
+- [x] Add a separate inner countdown ring that expands from the center to the edge of the fixed range ring and shifts from amber to red as the strike approaches
 - [x] Make the warning marker intensify/pulse near impact, then clear all telegraph visuals when the attack resolves
 - [x] Headless validation confirms hit-flash restoration, repeated-hit behavior, and attack-ring visibility/radius
 - [x] Headless validation confirms the countdown ring shrinks/changes color and telegraph visuals clear at impact
