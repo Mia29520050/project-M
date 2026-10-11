@@ -421,13 +421,14 @@ func _build_hud() -> void:
 	layer.add_child(full)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(530.0, 145.0)
-	panel.anchor_left = 0.5
-	panel.anchor_right = 0.5
-	panel.offset_left = -265.0
-	panel.offset_right = 265.0
+	panel.custom_minimum_size = Vector2(410.0, 135.0)
+	# Keep the hub's campfire and character actors unobstructed.
+	panel.anchor_left = 1.0
+	panel.anchor_right = 1.0
+	panel.offset_left = -430.0
+	panel.offset_right = -20.0
 	panel.offset_top = 22.0
-	panel.offset_bottom = 167.0
+	panel.offset_bottom = 157.0
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.035, 0.045, 0.105, 0.92)
 	style.border_color = Color(0.40, 0.61, 0.90, 0.88)
@@ -458,12 +459,20 @@ func _build_hud() -> void:
 	box.add_child(description)
 	prompt_label = Label.new()
 	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	prompt_label.add_theme_font_size_override("font_size", 15)
+	prompt_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	prompt_label.add_theme_font_size_override("font_size", 13)
 	prompt_label.add_theme_color_override("font_color", Color(0.98, 0.83, 0.96))
 	box.add_child(prompt_label)
 
 	status_label = Label.new()
-	status_label.position = Vector2(24.0, 180.0)
+	status_label.anchor_left = 0.0
+	status_label.anchor_right = 0.0
+	status_label.anchor_top = 1.0
+	status_label.anchor_bottom = 1.0
+	status_label.offset_left = 24.0
+	status_label.offset_right = 790.0
+	status_label.offset_top = -48.0
+	status_label.offset_bottom = -20.0
 	status_label.add_theme_font_size_override("font_size", 12)
 	status_label.add_theme_color_override("font_color", Color(0.75, 0.84, 1.0))
 	full.add_child(status_label)
