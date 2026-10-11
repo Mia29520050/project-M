@@ -6,6 +6,10 @@ const FALL_RESET_Y := -5.0
 const ATTACK_RANGE := 1.35
 const ATTACK_WINDUP_DURATION := 0.45
 const ATTACK_COOLDOWN := 1.25
+const BASE_BODY_COLOR := Color(0.49, 0.20, 0.56)
+const WINDUP_BODY_COLOR := Color(1.0, 0.32, 0.09)
+const HIT_FLASH_COLOR := Color(1.0, 1.0, 1.0)
+const HIT_FLASH_DURATION := 0.14
 var player_ref: Node3D
 var spawn_position: Vector3 = Vector3.ZERO
 var max_hp := 42
@@ -39,7 +43,7 @@ func _ready() -> void:
 	_visual_root = Node3D.new()
 	add_child(_visual_root)
 	_body_material = StandardMaterial3D.new()
-	_body_material.albedo_color = Color(0.49, 0.20, 0.56)
+	_body_material.albedo_color = BASE_BODY_COLOR
 	_body_material.roughness = 0.34
 
 	var body := MeshInstance3D.new()
@@ -104,8 +108,9 @@ func _ready() -> void:
 	_warning_ring = MeshInstance3D.new()
 	_warning_ring.name = "AttackTelegraphRing"
 	var ring_mesh := TorusMesh.new()
-	ring_mesh.inner_radius = 0.58
-	ring_mesh.outer_radius = 0.76
+	# Outline the actual melee attack radius so players can read the threatened area.
+	ring_mesh.inner_radius = ATTACK_RANGE - 0.12
+	ring_mesh.outer_radius = ATTACK_RANGE
 	ring_mesh.rings = 8
 	ring_mesh.ring_segments = 32
 	_warning_ring.mesh = ring_mesh
@@ -131,8 +136,13 @@ func _physics_process(delta: float) -> void:
 	_time += delta
 	_attack_timer = maxf(0.0, _attack_timer - delta)
 	_flash_timer = maxf(0.0, _flash_timer - delta)
-	if _flash_timer == 0.0 and _body_material.albedo_color != Color(0.49, 0.20, 0.56):
-		_body_material.albedo_color = Color(0.49, 0.20, 0.56)
+	# Hit flash has priority over the orange wind-up tint. Restore the correct state color afterward.
+	if _flash_timer > 0.0:
+		_body_material.albedo_color = HIT_FLASH_COLOR
+	elif _is_winding_up:
+		_body_material.albedo_color = WINDUP_BODY_COLOR
+	else:
+		_body_material.albedo_color = BASE_BODY_COLOR
 	_visual_root.position.y = sin(_time * 3.2) * 0.06
 	if not is_instance_valid(player_ref):
 		var players := get_tree().get_nodes_in_group("player")
@@ -145,11 +155,11 @@ func _physics_process(delta: float) -> void:
 	if _is_winding_up:
 		# Commit to a short, readable wind-up before the hit can happen.
 		# Tint the body as well so the cue remains legible if the ring is partly occluded.
-		_body_material.albedo_color = Color(1.0, 0.32, 0.09)
 		_windup_timer = maxf(0.0, _windup_timer - delta)
 		var progress := 1.0 - (_windup_timer / ATTACK_WINDUP_DURATION)
+		# Keep the ring at the true attack radius throughout the warning window.
 		if is_instance_valid(_warning_ring):
-			_warning_ring.scale = Vector3.ONE * (0.72 + 0.28 * progress)
+			_warning_ring.scale = Vector3.ONE
 		if is_instance_valid(_warning_label):
 			_warning_label.scale = Vector3.ONE * (0.85 + 0.45 * progress)
 		velocity.x = move_toward(velocity.x, 0.0, 12.0 * delta)
@@ -179,7 +189,7 @@ func _physics_process(delta: float) -> void:
 			_windup_timer = ATTACK_WINDUP_DURATION
 			if is_instance_valid(_warning_ring):
 				_warning_ring.show()
-				_warning_ring.scale = Vector3.ONE * 0.72
+				_warning_ring.scale = Vector3.ONE
 			if is_instance_valid(_warning_label):
 				_warning_label.show()
 				_warning_label.scale = Vector3.ONE * 0.85
@@ -223,8 +233,8 @@ func take_damage(amount: int) -> void:
 	_spawn_damage_number(amount)
 	if is_instance_valid(_name_label):
 		_name_label.text = "VOIDLING  ·  %d HP" % hp
-	_body_material.albedo_color = Color(1.0, 0.38, 0.67)
-	_flash_timer = 0.14
+	_body_material.albedo_color = HIT_FLASH_COLOR
+	_flash_timer = HIT_FLASH_DURATION
 	if hp <= 0:
 		_dead = true
 		died.emit(xp_reward, global_position, randf() < 0.32)
