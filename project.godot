@@ -17,6 +17,7 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 [autoload]
 
 MoonveilMeta="*res://scripts/moonveil_meta.gd"
+MoonveilProfiles="*res://scripts/moonveil_profiles.gd"
 
 [display]
 

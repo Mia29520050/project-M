@@ -46,14 +46,17 @@
 
 The current starter counts and healing profiles are a minimal prototype, not a final economy or rarity system. Potion stock resets when a new Player/run is created. Continue tuning only after a real GUI playtest.
 
-## Milestone C — Character-specific builds and shared account storage (future architecture plan)
-- [ ] Keep each character's own base stats, growth, skills, animations/VFX, combat mechanics and character-specific equipment/progression separate
-- [ ] Keep account-level resources shared across characters, including a common chest/stash and money deposited in a shared bank (or equivalent)
-- [ ] Define clear ownership for character-bound items, shared-storage items, carried money and banked money before implementing the save format
-- [ ] Store character data separately from shared account data so adding another character does not duplicate the whole game controller or break shared storage
+## Milestone C — Character-specific builds and shared account storage (schema scaffold implemented)
+- [x] Define versioned account and per-character JSON save structures with separate files
+- [x] Keep character-level progression, attributes, skills, equipment and carried currency in each character profile
+- [x] Keep banked currency and a stack-based shared stash in the account profile, outside character files
+- [x] Add atomic temp-file writes, ID validation, normalized quantities and safe handling for corrupt/unsupported saves
+- [ ] Connect persistent profile progression to live Player stats and decide which values remain run-only
+- [ ] Add a character-selection flow that loads one character profile without copying account-level data
+- [ ] Integrate shared stash and bank with the item inventory and economy UI when those systems exist
 - [ ] Build only the smallest reusable structure needed for the first two characters; avoid creating a large generic framework before a second character proves the design
 
-The shared chest/bank behavior is a future requirement, not a feature currently available in the prototype. MoonveilMeta is only a small persistent-data scaffold at present; it is not yet a complete account inventory or banking system.
+`MoonveilProfiles` is a persistence/ownership scaffold, not a finished character selector or live banking system. Current run stats, Moonshards, potions and temporary weapon upgrades still reset with each new Player. `MoonveilMeta` remains unchanged and continues to store its existing long-term progression fields. See `docs/SAVE_SCHEMA.md` for the exact v1 contract.
 
 ## Milestone D — Second character prototype (after Milestone A is solid)
 - [ ] Prototype a **mobile sword duelist** as the initial candidate to contrast with the current Moonveil mage

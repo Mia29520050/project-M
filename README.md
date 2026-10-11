@@ -20,6 +20,7 @@ flatpak run org.godotengine.Godot --path ~/Projects/AnimeFantasyRPG
 - WASD — Move.
 - Left mouse button — Strike a nearby Voidling.
 - Space — Dodge; 2 charges are available and recharge over time.
+- 1 / 2 / 3 — Use Minor / Standard / Greater healing potion; recovery is gradual and only one potion recovery can run at a time.
 - Q — Fire a homing Moonbolt at the nearest Voidling within range (15 Mana; 24 base damage). It does not aim with the mouse cursor.
 - I — Open/close the satchel; opening it pauses the run.
 - Esc — Close the satchel or toggle the pause menu.
@@ -48,5 +49,7 @@ This is a prototype, not a finished commercial-quality game. Character shapes an
 - scenes/magic_bolt.tscn and scripts/magic_bolt.gd — homing Moonbolt.
 - scripts/refuge_controller.gd — Refuge world, HUD, pause label, and run transition.
 - scripts/game_controller.gd — run world, quest, camera, combat UI, pause/death panels, and enemy spawning.
-- scripts/moonveil_meta.gd — persistent long-term progression data.
+- scripts/moonveil_meta.gd — persistent long-term progression flags, permanent upgrades/currency and unlocked regions.
+- scripts/moonveil_profiles.gd — versioned account save scaffold, shared bank/stash and separate character profile files (not yet connected to live run stats/UI).
+- docs/SAVE_SCHEMA.md — account/character data ownership and JSON schema v1.
 - docs/ROADMAP.md — longer-term development plan.
