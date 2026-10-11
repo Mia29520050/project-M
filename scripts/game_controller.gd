@@ -4,6 +4,7 @@ const PLAYER_SCENE = preload("res://scenes/player.tscn")
 const DUELIST_SCENE = preload("res://scenes/sword_duelist.tscn")
 const ENEMY_SCENE = preload("res://scenes/enemy.tscn")
 const BOLT_SCENE = preload("res://scenes/magic_bolt.tscn")
+const PAUSE_MENU_SCENE: PackedScene = preload("res://scenes/pause_menu.tscn")
 
 var player: Node3D
 var camera: Camera3D
@@ -23,7 +24,7 @@ var quest_label: Label
 var enemy_label: Label
 var inventory_panel: PanelContainer
 var inventory_label: Label
-var pause_panel: PanelContainer
+var pause_menu: CanvasLayer
 var death_panel: PanelContainer
 var toast_panel: PanelContainer
 var toast_label: Label
@@ -41,6 +42,7 @@ func _ready() -> void:
 	_create_player()
 	_create_camera()
 	_build_hud()
+	_build_pause_menu()
 	for spawn_point in [
 		Vector3(-3.0, 0.0, 1.0),
 		Vector3(4.0, 0.0, 0.0),
@@ -138,14 +140,31 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _set_paused(should_pause: bool) -> void:
 	get_tree().paused = should_pause
-	if is_instance_valid(pause_panel):
-		pause_panel.visible = should_pause and not _inventory_paused
+	if is_instance_valid(pause_menu):
+		if should_pause and not _inventory_paused:
+			pause_menu.open_menu()
+		else:
+			pause_menu.hide()
 	if is_instance_valid(player):
 		player.controls_locked = should_pause or (is_instance_valid(inventory_panel) and inventory_panel.visible)
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
 func _resume_game() -> void:
 	_set_paused(false)
+
+func _build_pause_menu() -> void:
+	pause_menu = PAUSE_MENU_SCENE.instantiate() as CanvasLayer
+	pause_menu.resume_requested.connect(_resume_game)
+	pause_menu.return_to_title_requested.connect(_return_to_title)
+	add_child(pause_menu)
+	pause_menu.hide()
+
+func _return_to_title() -> void:
+	_inventory_paused = false
+	get_tree().paused = false
+	var error := get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+	if error != OK:
+		push_error("Moonveil could not return to the main menu (error %d)." % error)
 
 func _build_world() -> void:
 	var environment_node := WorldEnvironment.new()
@@ -497,26 +516,6 @@ func _build_hud() -> void:
 	inventory_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	inventory_panel.hide()
 
-	pause_panel = _make_panel(full, Vector2(390, 260))
-	pause_panel.anchor_left = 0.5
-	pause_panel.anchor_right = 0.5
-	pause_panel.anchor_top = 0.5
-	pause_panel.anchor_bottom = 0.5
-	pause_panel.offset_left = -195.0
-	pause_panel.offset_right = 195.0
-	pause_panel.offset_top = -130.0
-	pause_panel.offset_bottom = 130.0
-	var pause_box := VBoxContainer.new()
-	pause_box.add_theme_constant_override("separation", 12)
-	pause_panel.add_child(pause_box)
-	_make_label(pause_box, "PAUSED  /  MOONVEIL", 19, Color(0.78, 0.86, 1.0))
-	_make_label(pause_box, "The world is paused.\nWASD move · Mouse 1 attack · Space dodge", 13, Color(0.72, 0.80, 0.94))
-	var resume_button := Button.new()
-	resume_button.text = "RESUME  [ ESC ]"
-	resume_button.custom_minimum_size = Vector2(0, 42)
-	resume_button.pressed.connect(_resume_game)
-	pause_box.add_child(resume_button)
-	pause_panel.hide()
 
 	# A dedicated death banner stays visible for the full shrine-return delay,
 	# instead of relying only on the short-lived toast notification.

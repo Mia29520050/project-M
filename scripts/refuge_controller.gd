@@ -2,6 +2,7 @@ extends Node3D
 
 const PLAYER_SCENE: PackedScene = preload("res://scenes/player.tscn")
 const DUELIST_SCENE: PackedScene = preload("res://scenes/sword_duelist.tscn")
+const PAUSE_MENU_SCENE: PackedScene = preload("res://scenes/pause_menu.tscn")
 const RUN_SCENE_PATH := "res://scenes/main.tscn"
 const SHRINE_POSITION := Vector3(0.0, 0.0, -1.0)
 const INTERACT_RANGE := 4.8
@@ -14,7 +15,7 @@ var player: Node3D
 var camera: Camera3D
 var prompt_label: Label
 var status_label: Label
-var pause_label: Label
+var pause_menu: CanvasLayer
 var _transitioning := false
 var _selection_open := false
 var _initial_selection_required := false
@@ -42,6 +43,7 @@ func _ready() -> void:
 	_build_world()
 	_build_hud()
 	_build_character_selection_ui()
+	_build_pause_menu()
 	_create_player()
 	_create_camera()
 	_refresh_prompt()
@@ -74,11 +76,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _selection_open:
 			_close_character_selection()
 		else:
-			get_tree().paused = not get_tree().paused
-			if is_instance_valid(player):
-				player.controls_locked = get_tree().paused or _initial_selection_required
-			if is_instance_valid(pause_label):
-				pause_label.visible = get_tree().paused
+			_set_refuge_paused(not get_tree().paused)
 		get_viewport().set_input_as_handled()
 		return
 	if get_tree().paused or _transitioning:
@@ -637,23 +635,34 @@ func _build_hud() -> void:
 	status_label.add_theme_color_override("font_color", Color(0.75, 0.84, 1.0))
 	full.add_child(status_label)
 
-	pause_label = Label.new()
-	pause_label.text = "PAUSED"
-	pause_label.anchor_left = 0.5
-	pause_label.anchor_right = 0.5
-	pause_label.anchor_top = 0.5
-	pause_label.anchor_bottom = 0.5
-	pause_label.offset_left = -150.0
-	pause_label.offset_right = 150.0
-	pause_label.offset_top = -40.0
-	pause_label.offset_bottom = 40.0
-	pause_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	pause_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	pause_label.add_theme_font_size_override("font_size", 34)
-	pause_label.add_theme_color_override("font_color", Color(0.78, 0.88, 1.0))
-	full.add_child(pause_label)
-	pause_label.hide()
 
+
+func _build_pause_menu() -> void:
+	pause_menu = PAUSE_MENU_SCENE.instantiate() as CanvasLayer
+	pause_menu.resume_requested.connect(_resume_refuge)
+	pause_menu.return_to_title_requested.connect(_return_to_title)
+	add_child(pause_menu)
+	pause_menu.hide()
+
+func _set_refuge_paused(should_pause: bool) -> void:
+	get_tree().paused = should_pause
+	if is_instance_valid(player):
+		player.controls_locked = should_pause or _initial_selection_required or _selection_open
+	if is_instance_valid(pause_menu):
+		if should_pause:
+			pause_menu.open_menu()
+		else:
+			pause_menu.hide()
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+
+func _resume_refuge() -> void:
+	_set_refuge_paused(false)
+
+func _return_to_title() -> void:
+	get_tree().paused = false
+	var error := get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+	if error != OK:
+		push_error("Moonveil could not return to the main menu (error %d)." % error)
 
 func _build_character_selection_ui() -> void:
 	# Soul-Knight-style in-world selection: characters remain visible; only a small
