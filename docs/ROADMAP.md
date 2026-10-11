@@ -21,16 +21,18 @@
 - [x] Give the player 0.72 seconds of post-hit invulnerability, with brief visibility flicker after the initial flash
 - [x] Ignore enemy body collisions during post-hit invulnerability, then restore collisions and visibility cleanly
 - [x] Keep enemy hit feedback readable when several hits occur close together; ensure the enemy cannot remain stuck white
-- [ ] Add lightweight, low-cost impact VFX where they improve attack readability; avoid expensive effects until performance is measured
+- [x] Add a short, low-cost icy-white impact spark burst on every Voidling hit (shared by melee and Moonbolt damage)
+- [x] Cap simultaneous impact effects, disable their shadows and automatically clean them up
 - [ ] Playtest enemy telegraph clarity, damage feedback, dodge response and camera framing before adding enemy archetypes
 - [x] Show a fixed outer attack-range ring during wind-up, sized to the actual 1.35-unit damage range
 - [x] Add a separate inner countdown ring that expands from the center to the edge of the fixed range ring and shifts from amber to red as the strike approaches
 - [x] Smooth both torus rings by increasing major-circle tessellation from 8 to 64 segments
 - [x] Make the warning marker intensify/pulse near impact, then clear all telegraph visuals when the attack resolves
 - [x] Headless validation confirms hit-flash restoration, repeated-hit behavior, and attack-ring visibility/radius
-- [x] Headless validation confirms the countdown ring shrinks/changes color and telegraph visuals clear at impact
+- [x] Headless validation confirms the countdown ring expands/changes color and telegraph visuals clear at impact
+- [x] Headless validation confirms six impact sparks are created per hit and self-clean without casting shadows
 
-**Acceptance checks:** melee and Moonbolt each trigger the enemy's white flash; player damage triggers a brief white overlay and 0.72 seconds of invulnerability; repeat damage is ignored during that window; enemy body collisions, visibility and original materials restore afterward; headless tests pass and effects remain readable in a GUI playtest.
+**Acceptance checks:** melee and Moonbolt each trigger the enemy's white flash and impact sparks; impact meshes fade and clean up, with active effects capped; player damage triggers a brief white overlay and 0.72 seconds of invulnerability; repeat damage is ignored during that window; enemy body collisions, visibility and original materials restore afterward; headless tests pass and effects remain readable in a GUI playtest.
 
 ## Milestone B — Healing items and deliberate recovery (future plan; not implemented)
 - [ ] Healing potions restore HP gradually over time instead of healing the full amount immediately

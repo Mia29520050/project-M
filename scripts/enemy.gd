@@ -10,6 +10,9 @@ const BASE_BODY_COLOR := Color(0.49, 0.20, 0.56)
 const WINDUP_BODY_COLOR := Color(1.0, 0.32, 0.09)
 const HIT_FLASH_COLOR := Color(1.0, 1.0, 1.0)
 const HIT_FLASH_DURATION := 0.14
+const IMPACT_SPARK_COUNT := 6
+const IMPACT_VFX_DURATION := 0.24
+const MAX_ACTIVE_IMPACT_VFX := 10
 const COUNTDOWN_RING_INNER_RADIUS := 0.72
 const COUNTDOWN_RING_OUTER_RADIUS := 0.88
 const COUNTDOWN_RING_START_SCALE := 0.12
@@ -32,6 +35,8 @@ var _warning_label: Label3D
 var _warning_ring: MeshInstance3D
 var _countdown_ring: MeshInstance3D
 var _countdown_material: StandardMaterial3D
+var _impact_spark_mesh: SphereMesh
+var _impact_spark_material: StandardMaterial3D
 var _time := 0.0
 
 func _ready() -> void:
@@ -44,6 +49,20 @@ func _ready() -> void:
 	collision.shape = capsule
 	collision.position.y = 0.77
 	add_child(collision)
+
+	# Tiny shared resources keep each brief impact effect cheap to create and render.
+	_impact_spark_mesh = SphereMesh.new()
+	_impact_spark_mesh.radius = 0.065
+	_impact_spark_mesh.height = 0.13
+	_impact_spark_mesh.radial_segments = 6
+	_impact_spark_mesh.rings = 3
+	_impact_spark_material = StandardMaterial3D.new()
+	_impact_spark_material.albedo_color = Color(0.82, 0.95, 1.0, 1.0)
+	_impact_spark_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_impact_spark_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_impact_spark_material.emission_enabled = true
+	_impact_spark_material.emission = Color(0.52, 0.82, 1.0)
+	_impact_spark_material.emission_energy_multiplier = 2.2
 
 	_visual_root = Node3D.new()
 	add_child(_visual_root)
@@ -132,7 +151,7 @@ func _ready() -> void:
 	_warning_ring.visible = false
 	add_child(_warning_ring)
 
-	# A separate inner ring shrinks toward the center as the attack approaches.
+	# A separate inner ring expands toward the edge as the attack approaches.
 	_countdown_ring = MeshInstance3D.new()
 	_countdown_ring.name = "AttackCountdownRing"
 	var countdown_mesh := TorusMesh.new()
@@ -279,10 +298,52 @@ func _spawn_damage_number(amount: int) -> void:
 	tween.parallel().tween_property(popup, "modulate:a", 0.0, 0.72)
 	tween.tween_callback(popup.queue_free)
 
+func _spawn_impact_vfx() -> void:
+	var scene_root: Node = get_tree().current_scene
+	if scene_root == null:
+		scene_root = get_parent()
+	if scene_root == null:
+		return
+
+	# Cap simultaneous effects so rapid hits never create an unbounded number of meshes.
+	var active_effects := get_tree().get_nodes_in_group("impact_vfx")
+	if active_effects.size() >= MAX_ACTIVE_IMPACT_VFX and is_instance_valid(active_effects[0]):
+		active_effects[0].queue_free()
+
+	var effect_root := Node3D.new()
+	effect_root.name = "HitImpactVFX"
+	effect_root.add_to_group("impact_vfx")
+	scene_root.add_child(effect_root)
+	effect_root.global_position = global_position + Vector3(0.0, 0.86, 0.0)
+
+	for i in range(IMPACT_SPARK_COUNT):
+		var angle := TAU * float(i) / float(IMPACT_SPARK_COUNT)
+		var direction := Vector3(cos(angle), randf_range(0.08, 0.62), sin(angle)).normalized()
+		var spark := MeshInstance3D.new()
+		spark.mesh = _impact_spark_mesh
+		spark.material_override = _impact_spark_material
+		spark.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		spark.scale = Vector3.ONE * randf_range(0.72, 1.12)
+		spark.transparency = 0.0
+		spark.position = direction * 0.10
+		effect_root.add_child(spark)
+
+		var end_position := direction * randf_range(0.38, 0.62) + Vector3(0.0, 0.16, 0.0)
+		var tween := spark.create_tween()
+		tween.set_parallel(true)
+		tween.tween_property(spark, "position", end_position, IMPACT_VFX_DURATION).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tween.tween_property(spark, "scale", Vector3.ZERO, IMPACT_VFX_DURATION)
+		tween.tween_property(spark, "transparency", 1.0, IMPACT_VFX_DURATION)
+
+	var cleanup_tween := effect_root.create_tween()
+	cleanup_tween.tween_interval(IMPACT_VFX_DURATION + 0.04)
+	cleanup_tween.tween_callback(effect_root.queue_free)
+
 func take_damage(amount: int) -> void:
 	if _dead: return
 	hp = maxi(0, hp - amount)
 	_spawn_damage_number(amount)
+	_spawn_impact_vfx()
 	if is_instance_valid(_name_label):
 		_name_label.text = "VOIDLING  ·  %d HP" % hp
 	_body_material.albedo_color = HIT_FLASH_COLOR
