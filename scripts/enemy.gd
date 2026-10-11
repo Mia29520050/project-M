@@ -27,6 +27,8 @@ var _visual_root: Node3D
 var _name_label: Label3D
 var _warning_label: Label3D
 var _warning_ring: MeshInstance3D
+var _countdown_ring: MeshInstance3D
+var _countdown_material: StandardMaterial3D
 var _time := 0.0
 
 func _ready() -> void:
@@ -127,6 +129,28 @@ func _ready() -> void:
 	_warning_ring.visible = false
 	add_child(_warning_ring)
 
+	# A separate inner ring shrinks toward the center as the attack approaches.
+	_countdown_ring = MeshInstance3D.new()
+	_countdown_ring.name = "AttackCountdownRing"
+	var countdown_mesh := TorusMesh.new()
+	countdown_mesh.inner_radius = 0.72
+	countdown_mesh.outer_radius = 0.88
+	countdown_mesh.rings = 8
+	countdown_mesh.ring_segments = 32
+	_countdown_ring.mesh = countdown_mesh
+	_countdown_material = StandardMaterial3D.new()
+	_countdown_material.albedo_color = Color(1.0, 0.72, 0.08, 0.95)
+	_countdown_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_countdown_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_countdown_material.emission_enabled = true
+	_countdown_material.emission = Color(1.0, 0.55, 0.03)
+	_countdown_material.emission_energy_multiplier = 1.6
+	_countdown_ring.material_override = _countdown_material
+	_countdown_ring.position.y = 0.09
+	_countdown_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_countdown_ring.visible = false
+	add_child(_countdown_ring)
+
 func _physics_process(delta: float) -> void:
 	if _dead: return
 	if global_position.y < FALL_RESET_Y:
@@ -161,7 +185,20 @@ func _physics_process(delta: float) -> void:
 		if is_instance_valid(_warning_ring):
 			_warning_ring.scale = Vector3.ONE
 		if is_instance_valid(_warning_label):
-			_warning_label.scale = Vector3.ONE * (0.85 + 0.45 * progress)
+			# The exclamation mark warms to red and pulses during the final part of the wind-up.
+			var urgency := Color(1.0, 0.72, 0.08).lerp(Color(1.0, 0.035, 0.02), progress)
+			var final_pulse := sin(_time * 30.0) * 0.10 if progress >= 0.70 else 0.0
+			_warning_label.modulate = urgency
+			_warning_label.scale = Vector3.ONE * (0.85 + 0.45 * progress + final_pulse)
+		if is_instance_valid(_countdown_ring):
+			# Outer ring shows reach; this inner ring shrinking toward the center shows time remaining.
+			var countdown_scale := maxf(0.12, 1.0 - progress * 0.88)
+			_countdown_ring.scale = Vector3(countdown_scale, 1.0, countdown_scale)
+			var countdown_color := Color(1.0, 0.72, 0.08).lerp(Color(1.0, 0.035, 0.02), progress)
+			countdown_color.a = 0.95
+			_countdown_material.albedo_color = countdown_color
+			_countdown_material.emission = countdown_color
+			_countdown_material.emission_energy_multiplier = 1.6 + progress * 1.4
 		velocity.x = move_toward(velocity.x, 0.0, 12.0 * delta)
 		velocity.z = move_toward(velocity.z, 0.0, 12.0 * delta)
 		if _windup_timer <= 0.0:
@@ -170,9 +207,13 @@ func _physics_process(delta: float) -> void:
 			if is_instance_valid(_warning_ring):
 				_warning_ring.hide()
 				_warning_ring.scale = Vector3.ONE
+			if is_instance_valid(_countdown_ring):
+				_countdown_ring.hide()
+				_countdown_ring.scale = Vector3.ONE
 			if is_instance_valid(_warning_label):
 				_warning_label.hide()
 				_warning_label.scale = Vector3.ONE
+				_warning_label.modulate = Color(1.0, 0.30, 0.10)
 			# The attack misses if the player leaves melee range during the warning.
 			if distance <= ATTACK_RANGE and player_ref.has_method("take_damage"):
 				player_ref.call("take_damage", touch_damage)
@@ -190,8 +231,15 @@ func _physics_process(delta: float) -> void:
 			if is_instance_valid(_warning_ring):
 				_warning_ring.show()
 				_warning_ring.scale = Vector3.ONE
+			if is_instance_valid(_countdown_ring):
+				_countdown_ring.show()
+				_countdown_ring.scale = Vector3.ONE
+				_countdown_material.albedo_color = Color(1.0, 0.72, 0.08, 0.95)
+				_countdown_material.emission = Color(1.0, 0.55, 0.03)
+				_countdown_material.emission_energy_multiplier = 1.6
 			if is_instance_valid(_warning_label):
 				_warning_label.show()
+				_warning_label.modulate = Color(1.0, 0.72, 0.08)
 				_warning_label.scale = Vector3.ONE * 0.85
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
