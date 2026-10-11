@@ -16,8 +16,11 @@
 
 ## Milestone A — Combat feel and hit feedback (in progress)
 - [x] When a Voidling is hit, flash its body **white briefly**, then restore its normal base appearance
-- [x] Make the white hit-flash work for both melee strikes and Moonbolt hits
-- [x] Keep hit feedback readable when several hits occur close together; ensure the enemy cannot remain stuck white
+- [x] Make the enemy white hit-flash work for both melee strikes and Moonbolt hits
+- [x] On player damage, briefly overlay a soft white flash without replacing original character materials
+- [x] Give the player 0.72 seconds of post-hit invulnerability, with brief visibility flicker after the initial flash
+- [x] Ignore enemy body collisions during post-hit invulnerability, then restore collisions and visibility cleanly
+- [x] Keep enemy hit feedback readable when several hits occur close together; ensure the enemy cannot remain stuck white
 - [ ] Add lightweight, low-cost impact VFX where they improve attack readability; avoid expensive effects until performance is measured
 - [ ] Playtest enemy telegraph clarity, damage feedback, dodge response and camera framing before adding enemy archetypes
 - [x] Show a fixed outer attack-range ring during wind-up, sized to the actual 1.35-unit damage range
@@ -27,7 +30,7 @@
 - [x] Headless validation confirms hit-flash restoration, repeated-hit behavior, and attack-ring visibility/radius
 - [x] Headless validation confirms the countdown ring shrinks/changes color and telegraph visuals clear at impact
 
-**Acceptance checks:** melee and Moonbolt each trigger the white flash; the Voidling returns to its original color; rapid consecutive hits do not break the flash; headless tests pass and the effect remains readable in a GUI playtest.
+**Acceptance checks:** melee and Moonbolt each trigger the enemy's white flash; player damage triggers a brief white overlay and 0.72 seconds of invulnerability; repeat damage is ignored during that window; enemy body collisions, visibility and original materials restore afterward; headless tests pass and effects remain readable in a GUI playtest.
 
 ## Milestone B — Healing items and deliberate recovery (future plan; not implemented)
 - [ ] Healing potions restore HP gradually over time instead of healing the full amount immediately

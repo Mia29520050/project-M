@@ -9,6 +9,9 @@ const WALK_SPEED := 5.8
 const DODGE_SPEED := 13.0
 const DODGE_DURATION := 0.22
 const DODGE_RECHARGE_PER_CHARGE := 1.25
+const HIT_INVULNERABILITY_DURATION := 0.72
+const PLAYER_HIT_FLASH_DURATION := 0.12
+const HIT_BLINK_INTERVAL := 0.075
 const GRAVITY := 22.0
 const MANA_REGEN_PER_SEC := 4.0
 const MANA_REGEN_DELAY_AFTER_CAST := 1.5
@@ -34,6 +37,12 @@ var max_dodge_charges := 2
 var dodge_charges := 2
 var _dodge_recharge_timer := 0.0
 var _invulnerability_timer := 0.0
+var _hit_flash_timer := 0.0
+var _hit_blink_timer := 0.0
+var _hit_invulnerability_active := false
+var _hit_blink_visible := true
+var _hit_flash_material: StandardMaterial3D
+var _visual_meshes: Array[MeshInstance3D] = []
 var _dodge_direction := Vector3.ZERO
 var _dodge_collision_exceptions: Array[PhysicsBody3D] = []
 var _facing_yaw := 0.0
@@ -139,18 +148,56 @@ func _build_visuals() -> void:
 	gem.position = Vector3(0.55, 1.43, 0.05)
 	_visual_root.add_child(gem)
 
+	# A translucent unshaded overlay gives every character part a brief, soft white hit flash
+	# without replacing the original materials (including a later staff upgrade).
+	_hit_flash_material = StandardMaterial3D.new()
+	_hit_flash_material.albedo_color = Color(1.0, 1.0, 1.0, 0.72)
+	_hit_flash_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_hit_flash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_hit_flash_material.emission_enabled = true
+	_hit_flash_material.emission = Color(1.0, 1.0, 1.0)
+	_hit_flash_material.emission_energy_multiplier = 0.35
+	for child in _visual_root.get_children():
+		var visual := child as MeshInstance3D
+		if visual != null:
+			_visual_meshes.append(visual)
+
+func _set_player_hit_flash(enabled: bool) -> void:
+	for visual in _visual_meshes:
+		if is_instance_valid(visual):
+			visual.material_overlay = _hit_flash_material if enabled else null
+
 func _physics_process(delta: float) -> void:
 	if global_position.y < FALL_RESET_Y:
 		global_position = Vector3(0.0, 0.0, 6.0)
 		velocity = Vector3.ZERO
 		_dodge_timer = 0.0
-		_end_dodge_collision_phase()
+		if _invulnerability_timer > 0.0:
+			_begin_dodge_collision_phase()
+		else:
+			_end_dodge_collision_phase()
 		return
 	_time += delta
 	_attack_timer = maxf(0.0, _attack_timer - delta)
 	_magic_timer = maxf(0.0, _magic_timer - delta)
 	_dodge_timer = maxf(0.0, _dodge_timer - delta)
 	_invulnerability_timer = maxf(0.0, _invulnerability_timer - delta)
+	if _hit_flash_timer > 0.0:
+		_hit_flash_timer = maxf(0.0, _hit_flash_timer - delta)
+		if _hit_flash_timer <= 0.0:
+			_set_player_hit_flash(false)
+	if _hit_invulnerability_active:
+		if _invulnerability_timer <= 0.0:
+			_hit_invulnerability_active = false
+			_hit_blink_visible = true
+			_visual_root.visible = true
+			_set_player_hit_flash(false)
+		elif _hit_flash_timer <= 0.0:
+			_hit_blink_timer -= delta
+			if _hit_blink_timer <= 0.0:
+				_hit_blink_visible = not _hit_blink_visible
+				_visual_root.visible = _hit_blink_visible
+				_hit_blink_timer = HIT_BLINK_INTERVAL
 	if dodge_charges < max_dodge_charges:
 		_dodge_recharge_timer = maxf(0.0, _dodge_recharge_timer - delta)
 		if _dodge_recharge_timer <= 0.0:
@@ -212,7 +259,7 @@ func _physics_process(delta: float) -> void:
 		_attack_anim = maxf(0.0, _attack_anim - delta)
 	_visual_root.rotation.y = _facing_yaw + attack_sway
 	move_and_slide()
-	if _dodge_timer <= 0.0:
+	if _dodge_timer <= 0.0 and _invulnerability_timer <= 0.0:
 		_end_dodge_collision_phase()
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -247,7 +294,7 @@ func _start_dodge() -> void:
 	dodge_charges -= 1
 	if _dodge_recharge_timer <= 0.0:
 		_dodge_recharge_timer = DODGE_RECHARGE_PER_CHARGE
-	_invulnerability_timer = DODGE_DURATION
+	_invulnerability_timer = maxf(_invulnerability_timer, DODGE_DURATION)
 	stats_changed.emit()
 	notification_requested.emit("Dodge! %d/%d charges left." % [dodge_charges, max_dodge_charges])
 
@@ -337,6 +384,15 @@ func is_defeated() -> bool:
 func take_damage(amount: int) -> void:
 	if _defeated or _invulnerability_timer > 0.0: return
 	hp = maxi(0, hp - amount)
+	_invulnerability_timer = HIT_INVULNERABILITY_DURATION
+	_hit_invulnerability_active = true
+	_hit_flash_timer = PLAYER_HIT_FLASH_DURATION
+	_hit_blink_timer = HIT_BLINK_INTERVAL
+	_hit_blink_visible = true
+	_visual_root.visible = true
+	_set_player_hit_flash(true)
+	# Ignore enemy body collision for the same short window as damage invulnerability.
+	_begin_dodge_collision_phase()
 	stats_changed.emit()
 	if hp <= 0:
 		_defeated = true
