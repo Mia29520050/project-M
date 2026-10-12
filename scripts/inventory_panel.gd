@@ -58,19 +58,15 @@ func refresh(current_player: Node) -> void:
 	_refresh_bag_content()
 
 func _build_ui() -> void:
-	# Explicitly capture the current scene/HUD before the blur shader samples it.
-	var back_buffer := BackBufferCopy.new()
-	back_buffer.copy_mode = BackBufferCopy.COPY_MODE_VIEWPORT
-	add_child(back_buffer)
-
-	# Blur and dim only the captured scene; inventory UI is drawn afterwards and stays crisp.
-	var blur_overlay := ColorRect.new()
-	blur_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	blur_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	var blur_material := ShaderMaterial.new()
-	blur_material.shader = load("res://shaders/inventory_blur.gdshader") as Shader
-	blur_overlay.material = blur_material
-	add_child(blur_overlay)
+	# Use a stable translucent tint rather than sampling the live viewport.
+	# Sparse screen-texture samples left ghosted copies of the HUD/world behind
+	# the satchel on the GL Compatibility renderer.
+	var backdrop := ColorRect.new()
+	backdrop.name = "InventoryBackdrop"
+	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	backdrop.color = Color(0.012, 0.018, 0.044, 1.0)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(backdrop)
 
 	# The old panel occupied almost the entire 1280x720 viewport. Scale the whole
 	# interface uniformly so the full-body art, item grid and text keep their ratios.
