@@ -43,7 +43,7 @@ The same working tree also contains the previously requested, still-uncommitted 
 
 ## Recommended next step for Claude
 
-> Please review this handoff, the uncommitted diff, `README.md`, and `docs/ROADMAP.md`. Recommend the single best next small milestone for Moonveil that fits the current architecture/engineering guardrails. Do not modify code yet. Explain why it should come next, identify dependencies and risks, and give concise acceptance tests including a GUI playtest on Bazzite. Consider whether the next step should be a full manual key-rebinding regression pass, controller support, persistent inventory/profile integration, or another existing roadmap item.
+> Please review this handoff, the proposed diff in this PR, `README.md`, and `docs/ROADMAP.md`. Recommend the single best next small milestone for Moonveil that fits the current architecture/engineering guardrails. Do not modify code yet. Explain why it should come next, identify dependencies and risks, and give concise acceptance tests including a GUI playtest on Bazzite. Consider whether the next step should be a full manual key-rebinding regression pass, controller support, persistent inventory/profile integration, or another existing roadmap item.
 
 ## Publish/review workflow
 
