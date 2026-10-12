@@ -34,7 +34,7 @@ flatpak run org.godotengine.Godot --path ~/Projects/AnimeFantasyRPG
 
 ## Main Menu and settings
 
-F5 starts at a dedicated procedural title screen with Continue, New Journey, System Settings, Credits & Controls, and Quit Game. Continue resumes the saved wayfarer when available. New Journey reopens the Refuge's campfire selection but does not delete character profiles or permanent progression. Settings include master volume, fullscreen, and vertical sync and persist to `user://moonveil_settings.cfg`. The same settings panel is available from the shared Pause Menu in both the Refuge and an expedition.
+F5 starts at a dedicated procedural title screen with Continue, New Journey, System Settings, Credits & Controls, and Quit Game. Continue resumes the saved wayfarer when available. New Journey reopens the Refuge's campfire selection but does not delete character profiles or permanent progression. System Settings include master volume, Windowed / Borderless Fullscreen (Exclusive Fullscreen is offered on display servers where it is a distinct mode), window resolution (960x540 through the monitor-supported sizes), vertical sync, and a 30–240 FPS / Unlimited frame cap. Settings persist to `user://moonveil_settings.cfg`; new and migrated legacy settings default to Windowed at 1280x720 and 60 FPS, with VSync enabled on new installs. Fullscreen modes use the monitor's native size. The same settings panel is available from the shared Pause Menu in both the Refuge and an expedition.
 
 ## Current playable loop
 

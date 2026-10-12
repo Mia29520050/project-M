@@ -108,7 +108,7 @@ Both models are procedural placeholders rather than rigged art assets. The dueli
 ## Menu system — implemented
 - [x] Procedural anime-fantasy Main Menu with animated moon backdrop, saved-wayfarer summary, Continue, New Journey, Settings, Credits & Controls, and Quit
 - [x] New Journey confirmation returns to the Refuge's campfire selection without deleting character profiles or permanent progression
-- [x] Reusable Settings panel for master volume, fullscreen and vertical sync, persisted to `user://moonveil_settings.cfg`
+- [x] Reusable Settings panel for master volume, platform-appropriate Windowed/Fullscreen modes, windowed resolution, VSync and FPS limit, persisted to `user://moonveil_settings.cfg`
 - [x] Shared Pause Menu in Refuge and expedition with Resume, Settings, and confirmed Return to Title
 - [x] Main Menu is the F5 entry scene; Continue opens the Refuge with the saved wayfarer
 - [x] Headless smoke tests for Main Menu, Refuge and Whispering Woods; GUI-tested Settings, Credits, New Journey, Pause, and Continue/return-to-title flow
