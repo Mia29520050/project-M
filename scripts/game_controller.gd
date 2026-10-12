@@ -104,6 +104,30 @@ func _physics_process(_delta: float) -> void:
 		camera.global_position = player.global_position + Vector3(0.0, 17.0, 13.0)
 		camera.look_at(player.global_position + Vector3(0.0, 0.75, 0.0), Vector3.UP)
 
+func _input(event: InputEvent) -> void:
+	# Handle the satchel binding before GUI focus navigation can consume Tab.
+	if event is InputEventKey and event.echo:
+		return
+	if not event.is_action_pressed("inventory"):
+		return
+	# Ignore opening the satchel after the run has ended.
+	if is_instance_valid(player) and player.has_method("is_defeated") and bool(player.call("is_defeated")):
+		get_viewport().set_input_as_handled()
+		return
+	if _inventory_paused:
+		_inventory_paused = false
+		inventory_panel.hide()
+		hud_layer.visible = true
+		_set_paused(false)
+	elif not get_tree().paused:
+		_inventory_paused = true
+		inventory_panel.refresh(player)
+		hud_layer.visible = false
+		inventory_panel.show()
+		_set_paused(true)
+	_refresh_hud()
+	get_viewport().set_input_as_handled()
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.echo:
 		return
@@ -125,22 +149,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			_set_paused(false)
 		else:
 			_set_paused(true)
-		get_viewport().set_input_as_handled()
-		return
-
-	if event.is_action_pressed("inventory"):
-		if _inventory_paused:
-			_inventory_paused = false
-			inventory_panel.hide()
-			hud_layer.visible = true
-			_set_paused(false)
-		elif not get_tree().paused:
-			_inventory_paused = true
-			inventory_panel.refresh(player)
-			hud_layer.visible = false
-			inventory_panel.show()
-			_set_paused(true)
-		_refresh_hud()
 		get_viewport().set_input_as_handled()
 		return
 

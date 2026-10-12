@@ -3,6 +3,7 @@ extends Node3D
 const PLAYER_SCENE: PackedScene = preload("res://scenes/player.tscn")
 const DUELIST_SCENE: PackedScene = preload("res://scenes/sword_duelist.tscn")
 const PAUSE_MENU_SCENE: PackedScene = preload("res://scenes/pause_menu.tscn")
+const INVENTORY_PANEL_SCRIPT: Script = preload("res://scripts/inventory_panel.gd")
 const RUN_SCENE_PATH := "res://scenes/main.tscn"
 const SHRINE_POSITION := Vector3(0.0, 0.0, -1.0)
 const INTERACT_RANGE := 4.8
@@ -16,6 +17,9 @@ var camera: Camera3D
 var prompt_label: Label
 var status_label: Label
 var pause_menu: CanvasLayer
+var inventory_layer: CanvasLayer
+var inventory_panel: Control
+var _inventory_paused := false
 var _transitioning := false
 var _selection_open := false
 var _initial_selection_required := false
@@ -88,11 +92,32 @@ func _process(delta: float) -> void:
 		camera.size = lerpf(HUB_CAMERA_SIZE, CAMPFIRE_CAMERA_SIZE, _camera_focus_amount)
 	_refresh_prompt()
 
+func _input(event: InputEvent) -> void:
+	# Handle the satchel binding before GUI focus navigation can consume Tab.
+	if event is InputEventKey and event.echo:
+		return
+	if not event.is_action_pressed("inventory"):
+		return
+	if _inventory_paused:
+		_close_refuge_inventory()
+	elif not get_tree().paused and not _selection_open and not _initial_selection_required and not _transitioning and is_instance_valid(player):
+		_inventory_paused = true
+		inventory_panel.refresh(player)
+		inventory_panel.show()
+		get_tree().paused = true
+		player.controls_locked = true
+		if is_instance_valid(pause_menu):
+			pause_menu.hide()
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	get_viewport().set_input_as_handled()
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.echo:
 		return
 	if event.is_action_pressed("pause"):
-		if _selection_open:
+		if _inventory_paused:
+			_close_refuge_inventory()
+		elif _selection_open:
 			_close_character_selection()
 		else:
 			_set_refuge_paused(not get_tree().paused)
@@ -654,6 +679,20 @@ func _build_hud() -> void:
 	status_label.add_theme_color_override("font_color", Color(0.75, 0.84, 1.0))
 	full.add_child(status_label)
 
+	# Share the same satchel UI and pause behavior used in Whispering Woods.
+	inventory_layer = CanvasLayer.new()
+	inventory_layer.name = "InventoryCanvasLayer"
+	inventory_layer.layer = 9
+	inventory_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(inventory_layer)
+
+	inventory_panel = Control.new()
+	inventory_panel.name = "InventoryPanel"
+	inventory_panel.set_script(INVENTORY_PANEL_SCRIPT)
+	inventory_panel.process_mode = Node.PROCESS_MODE_ALWAYS
+	inventory_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	inventory_layer.add_child(inventory_panel)
+	inventory_panel.hide()
 
 
 func _build_pause_menu() -> void:
@@ -663,10 +702,23 @@ func _build_pause_menu() -> void:
 	add_child(pause_menu)
 	pause_menu.hide()
 
+func _close_refuge_inventory() -> void:
+	if not _inventory_paused:
+		return
+	_inventory_paused = false
+	if is_instance_valid(inventory_panel):
+		inventory_panel.hide()
+	get_tree().paused = false
+	if is_instance_valid(player):
+		player.controls_locked = _initial_selection_required or _selection_open
+	if is_instance_valid(pause_menu):
+		pause_menu.hide()
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+
 func _set_refuge_paused(should_pause: bool) -> void:
 	get_tree().paused = should_pause
 	if is_instance_valid(player):
-		player.controls_locked = should_pause or _initial_selection_required or _selection_open
+		player.controls_locked = should_pause or _initial_selection_required or _selection_open or _inventory_paused
 	if is_instance_valid(pause_menu):
 		if should_pause:
 			pause_menu.open_menu()
@@ -678,6 +730,9 @@ func _resume_refuge() -> void:
 	_set_refuge_paused(false)
 
 func _return_to_title() -> void:
+	_inventory_paused = false
+	if is_instance_valid(inventory_panel):
+		inventory_panel.hide()
 	get_tree().paused = false
 	var error := get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 	if error != OK:
