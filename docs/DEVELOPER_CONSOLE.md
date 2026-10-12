@@ -1,5 +1,7 @@
 # Moonveil Developer Console
 
+**Debug builds only.** The console removes itself when running a release build. Do not export a shareable release build with debugging enabled, or the console and its test commands will remain available.
+
 Open the console from any scene with **F10** or the backtick key (`). Press **Escape** or use **Close** to return to the previous pause state. The console pauses gameplay while open, persists through scene changes, and supports Up/Down for command history.
 
 Type `help` for the current command list. Supported commands:
@@ -24,4 +26,4 @@ Type `help` for the current command list. Supported commands:
 | `clear` | Clear console output |
 | `close` | Close the console |
 
-This is a development tool, not a secure sandbox: the command set is intentionally allow-listed and does not expose arbitrary script evaluation or terminal commands. Do not run character-changing commands if you do not intend to update the saved active character. Inventory-item injection and permanent-currency commands are deliberately omitted until their gameplay and save behavior are implemented.
+The `time_scale` command is temporary: the console resets `Engine.time_scale` to `1.0` when it closes or changes scenes. This is a development tool, not a secure sandbox: the command set is intentionally allow-listed and does not expose arbitrary script evaluation or terminal commands. Do not run character-changing commands if you do not intend to update the saved active character. Inventory-item injection and permanent-currency commands are deliberately omitted until their gameplay and save behavior are implemented.

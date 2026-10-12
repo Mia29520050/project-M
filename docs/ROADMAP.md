@@ -64,7 +64,7 @@ The current starter counts and healing profiles are a minimal prototype, not a f
 - [x] Reuse the shared movement, health, dodge, hit flash, potions, Voidling AI, damage/death flow and run scene
 - [x] Give the player HUD and help text character-specific skill/weapon messaging
 - [x] Make the active Refuge selection drive which character scene enters Whispering Woods
-- [ ] Playtest both characters against the same Voidling encounters and tune damage, reach, mobility and stamina in GUI
+- [ ] Playtest both characters against the same Voidling encounters and tune damage, reach, mobility and stamina in GUI; follow `docs/QA_CHECKLIST.md` before adding new enemy archetypes or controller support
 
 Both models are procedural placeholders rather than rigged art assets. The duelist's numbers are a first-pass prototype, not final balance; profile saves for long-term live stats/equipment remain a separate integration task.
 
@@ -72,7 +72,8 @@ Both models are procedural placeholders rather than rigged art assets. The dueli
 - [ ] Data-driven items, stats and equipment slots (weapon, head, body, accessory)
 - [ ] Robust save/load profile with versioned data and shared-account/character data ownership
 - [x] Audio/display settings stored in user configuration and shared between Main Menu and Pause Menu
-- [ ] Key rebinding and controller support
+- [x] Keyboard/mouse key rebinding with duplicate/reserved-key checks, modifier-chord rejection, invalid-config recovery, reset-to-defaults, and `user://moonveil_settings.cfg` persistence
+- [ ] Gamepad/controller support
 - [ ] Dodge cooldown UI, more impact feedback and tuning
 - [ ] Basic dialogue and NPC interaction
 
@@ -108,13 +109,14 @@ Both models are procedural placeholders rather than rigged art assets. The dueli
 ## Menu system — implemented
 - [x] Procedural anime-fantasy Main Menu with animated moon backdrop, saved-wayfarer summary, Continue, New Journey, Settings, Credits & Controls, and Quit
 - [x] New Journey confirmation returns to the Refuge's campfire selection without deleting character profiles or permanent progression
-- [x] Reusable Settings panel for master volume, platform-appropriate Windowed/Fullscreen modes, windowed resolution, VSync and FPS limit, persisted to `user://moonveil_settings.cfg`
+- [x] Reusable category-based Settings panel for master volume, platform-appropriate Windowed/Fullscreen modes, windowed resolution, Low/Balanced/High graphics presets, VSync and FPS limit, persisted to `user://moonveil_settings.cfg`
+- [x] Remappable keyboard/mouse controls, duplicate/reserved-key guard, modifier-chord rejection, invalid-config recovery, live key hints, optional HUD hints, and Return-to-Title confirmation preference
 - [x] Shared Pause Menu in Refuge and expedition with Resume, Settings, and confirmed Return to Title
 - [x] Main Menu is the F5 entry scene; Continue opens the Refuge with the saved wayfarer
 - [x] Headless smoke tests for Main Menu, Refuge and Whispering Woods; GUI-tested Settings, Credits, New Journey, Pause, and Continue/return-to-title flow
 
 
 ## Developer tools — implemented
-- [x] In-game console on F10 or backtick, persistent across scenes, with Up/Down command history and clearable output
+- [x] Debug-build-only in-game console on F10 or backtick, persistent across scenes, with Up/Down command history and clearable output
 - [x] Allow-listed scene/profile/status/settings commands plus run-only XP, teleport, heal/nonlethal damage, spawn/clear enemies, time scaling, and defeat/revive tests
-- [x] Developer console pauses game input while open and has no shell/eval command path
+- [x] Developer console pauses game input while open, resets time scale on close/scene change, and has no shell/eval command path

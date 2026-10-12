@@ -13,6 +13,7 @@ var _main_status: Label
 var _settings_panel: Control
 var _credits_panel: Control
 var _credits_back_button: Button
+var _credits_body_label: Label
 var _confirm_panel: Control
 var _confirm_back_button: Button
 var _confirm_start_button: Button
@@ -27,6 +28,9 @@ func _ready() -> void:
 	_build_environment()
 	_build_backdrop()
 	_build_menu_ui()
+	if not MoonveilSettings.settings_changed.is_connected(_on_settings_changed):
+		MoonveilSettings.settings_changed.connect(_on_settings_changed)
+	_update_credits_controls()
 
 func _process(delta: float) -> void:
 	_time += delta
@@ -394,13 +398,13 @@ func _build_credits_panel() -> void:
 	heading.add_theme_font_size_override("font_size", 26)
 	heading.add_theme_color_override("font_color", Color(0.84, 0.93, 1.0))
 	column.add_child(heading)
-	var body := Label.new()
-	body.text = "A small anime-fantasy RPG prototype, built around a quiet refuge and short expeditions beyond the veil.\n\nCONTROLS\nWASD  Move\nMouse 1  Attack\nSpace  Dodge\nQ  Character skill\nE  Interact\nI  Satchel\nEsc  Pause\n\nBuilt with Godot. Character and environment meshes are procedural prototypes."
-	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.add_theme_font_size_override("font_size", 14)
-	body.add_theme_color_override("font_color", Color(0.69, 0.80, 0.93))
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_child(body)
+	_credits_body_label = Label.new()
+	_credits_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_credits_body_label.add_theme_font_size_override("font_size", 14)
+	_credits_body_label.add_theme_color_override("font_color", Color(0.69, 0.80, 0.93))
+	_credits_body_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(_credits_body_label)
+	_update_credits_controls()
 	_credits_back_button = _make_menu_button("BACK TO TITLE", true)
 	_credits_back_button.pressed.connect(_close_credits)
 	column.add_child(_credits_back_button)
@@ -540,6 +544,29 @@ func _on_settings_closed() -> void:
 		_settings_panel.queue_free()
 	_settings_panel = null
 	_focus_default_menu_button()
+
+func _on_settings_changed() -> void:
+	_update_credits_controls()
+
+func _update_credits_controls() -> void:
+	if not is_instance_valid(_credits_body_label):
+		return
+	var move_up := MoonveilSettings.get_control_binding_label("move_up")
+	var move_left := MoonveilSettings.get_control_binding_label("move_left")
+	var move_down := MoonveilSettings.get_control_binding_label("move_down")
+	var move_right := MoonveilSettings.get_control_binding_label("move_right")
+	_credits_body_label.text = "A small anime-fantasy RPG prototype, built around a quiet refuge and short expeditions beyond the veil.\n\nCONTROLS\n%s / %s / %s / %s  Move\n%s  Attack\n%s  Dodge\n%s  Character skill\n%s  Interact\n%s / %s / %s  Potions\n%s  Satchel\n%s  Pause\n\nBuilt with Godot. Character and environment meshes are procedural prototypes." % [
+		move_up, move_left, move_down, move_right,
+		MoonveilSettings.get_control_binding_label("attack"),
+		MoonveilSettings.get_control_binding_label("dodge"),
+		MoonveilSettings.get_control_binding_label("moonbolt"),
+		MoonveilSettings.get_control_binding_label("interact"),
+		MoonveilSettings.get_control_binding_label("potion_minor"),
+		MoonveilSettings.get_control_binding_label("potion_standard"),
+		MoonveilSettings.get_control_binding_label("potion_greater"),
+		MoonveilSettings.get_control_binding_label("inventory"),
+		MoonveilSettings.get_control_binding_label("pause")
+	]
 
 func _open_credits() -> void:
 	_credits_panel.show()

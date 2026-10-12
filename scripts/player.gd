@@ -352,9 +352,14 @@ func add_healing_potion(grade: int, amount: int = 1) -> void:
 	stats_changed.emit()
 
 func get_potion_status_text() -> String:
+	var potion_counts := "%s:%d  %s:%d  %s:%d" % [
+		MoonveilSettings.get_control_binding_short_label("potion_minor"), minor_potions,
+		MoonveilSettings.get_control_binding_short_label("potion_standard"), standard_potions,
+		MoonveilSettings.get_control_binding_short_label("potion_greater"), greater_potions
+	]
 	if _healing_active:
-		return "HEALING %.1fs  ·  1:%d  2:%d  3:%d" % [_healing_time_remaining, minor_potions, standard_potions, greater_potions]
-	return "POTIONS  1:%d  2:%d  3:%d" % [minor_potions, standard_potions, greater_potions]
+		return "HEALING %.1fs  ·  %s" % [_healing_time_remaining, potion_counts]
+	return "POTIONS  %s" % potion_counts
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _defeated or controls_locked:

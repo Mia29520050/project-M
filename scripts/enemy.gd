@@ -270,6 +270,14 @@ func _physics_process(delta: float) -> void:
 		velocity.y = -0.25
 	move_and_slide()
 
+func set_name_label_stack_tier(tier: int) -> void:
+	if not is_instance_valid(_name_label):
+		return
+	# The controller computes tiers in screen space so only overlapping labels
+	# move. Smooth the offset to avoid visible popping as enemies move.
+	var target_height := 2.0 + float(maxi(tier, 0)) * 0.62
+	_name_label.position.y = lerpf(_name_label.position.y, target_height, 0.32)
+
 func _spawn_damage_number(amount: int) -> void:
 	var popup := Label3D.new()
 	popup.process_mode = Node.PROCESS_MODE_PAUSABLE

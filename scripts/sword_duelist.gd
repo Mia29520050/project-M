@@ -22,7 +22,7 @@ func _ready() -> void:
 	weapon_name = "Training Sword"
 	weapon_bonus = 0
 	super._ready()
-	notification_requested.emit("Astra Vale, Sword Duelist. Chain three strikes; Q uses Crescent Lunge.")
+	notification_requested.emit("Astra Vale, Sword Duelist. Chain three strikes; %s uses Crescent Lunge." % MoonveilSettings.get_control_binding_label("moonbolt"))
 
 func _build_visuals() -> void:
 	_visual_root = Node3D.new()
@@ -207,7 +207,8 @@ func _resolve_lunge_hit(target: Node3D) -> void:
 		notification_requested.emit("CRESCENT LUNGE HIT  ·  %d damage" % (30 + weapon_bonus))
 
 func get_skill_status_text() -> String:
-	return "Q CRESCENT LUNGE  ·  READY" if _lunge_cooldown <= 0.0 else "Q LUNGE  ·  %.1fs" % _lunge_cooldown
+	var skill_key := MoonveilSettings.get_control_binding_label("moonbolt")
+	return "%s CRESCENT LUNGE  ·  READY" % skill_key if _lunge_cooldown <= 0.0 else "%s LUNGE  ·  %.1fs" % [skill_key, _lunge_cooldown]
 
 func equip_moonfire_staff() -> bool:
 	notification_requested.emit("The Training Sword has its own path; no staff upgrade is available.")
