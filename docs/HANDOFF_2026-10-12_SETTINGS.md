@@ -24,7 +24,7 @@ Expanded the previous audio/display-only settings panel into a category-based RP
 - `scripts/main_menu.gd`: Credits & Controls text is generated from the current bindings.
 - `README.md` and `docs/ROADMAP.md`: locally updated to document the added settings and mark keyboard/mouse rebinding complete while keeping gamepad support open.
 
-The same PR includes the inventory UI work: `scripts/inventory_panel.gd`, `assets/ui/moonveil_mage_fullbody.svg`, `assets/ui/moonveil_duelist_fullbody.svg`, and inventory-related updates in `scripts/game_controller.gd`. The old 9-sample screen-texture blur was removed after it caused visible ghost copies of the scene on the GL Compatibility renderer; the satchel now uses a solid midnight-blue backdrop. The PR is not merged.
+The same PR includes the inventory UI work: `scripts/inventory_panel.gd`, `assets/ui/moonveil_mage_fullbody.svg`, `assets/ui/moonveil_duelist_fullbody.svg`, and inventory-related updates in `scripts/game_controller.gd`. After the original sparse blur caused visible ghost copies on the GL Compatibility renderer, the satchel backdrop was changed to a separable 15-tap Gaussian: horizontal blur, an explicit viewport refresh, then vertical blur with a midnight-blue tint. Both Refuge and Woods have been visually checked. The PR is not merged.
 
 ## Verification performed
 

@@ -58,15 +58,46 @@ func refresh(current_player: Node) -> void:
 	_refresh_bag_content()
 
 func _build_ui() -> void:
-	# Use a stable translucent tint rather than sampling the live viewport.
-	# Sparse screen-texture samples left ghosted copies of the HUD/world behind
-	# the satchel on the GL Compatibility renderer.
-	var backdrop := ColorRect.new()
-	backdrop.name = "InventoryBackdrop"
-	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	backdrop.color = Color(0.012, 0.018, 0.044, 1.0)
-	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(backdrop)
+	# Use a separable Gaussian in two passes. Refresh the viewport copy between
+	# passes so the vertical pass samples the horizontally blurred image, rather
+	# than averaging distant screen positions into visible duplicate silhouettes.
+	var blur_shader := load("res://shaders/inventory_blur.gdshader") as Shader
+
+	var horizontal_copy := BackBufferCopy.new()
+	horizontal_copy.name = "InventoryHorizontalCopy"
+	horizontal_copy.copy_mode = BackBufferCopy.COPY_MODE_VIEWPORT
+	add_child(horizontal_copy)
+
+	var horizontal_blur := ColorRect.new()
+	horizontal_blur.name = "InventoryHorizontalBlur"
+	horizontal_blur.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	horizontal_blur.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var horizontal_material := ShaderMaterial.new()
+	horizontal_material.shader = blur_shader
+	horizontal_material.set_shader_parameter("direction", Vector2(1.0, 0.0))
+	horizontal_material.set_shader_parameter("blur_radius", 1.5)
+	horizontal_material.set_shader_parameter("tint", Vector3.ONE)
+	horizontal_material.set_shader_parameter("darken", 0.0)
+	horizontal_blur.material = horizontal_material
+	add_child(horizontal_blur)
+
+	var vertical_copy := BackBufferCopy.new()
+	vertical_copy.name = "InventoryVerticalCopy"
+	vertical_copy.copy_mode = BackBufferCopy.COPY_MODE_VIEWPORT
+	add_child(vertical_copy)
+
+	var vertical_blur := ColorRect.new()
+	vertical_blur.name = "InventoryBackdropBlur"
+	vertical_blur.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vertical_blur.mouse_filter = Control.MOUSE_FILTER_STOP
+	var vertical_material := ShaderMaterial.new()
+	vertical_material.shader = blur_shader
+	vertical_material.set_shader_parameter("direction", Vector2(0.0, 1.0))
+	vertical_material.set_shader_parameter("blur_radius", 1.5)
+	vertical_material.set_shader_parameter("tint", Vector3(0.66, 0.70, 0.90))
+	vertical_material.set_shader_parameter("darken", 0.45)
+	vertical_blur.material = vertical_material
+	add_child(vertical_blur)
 
 	# The old panel occupied almost the entire 1280x720 viewport. Scale the whole
 	# interface uniformly so the full-body art, item grid and text keep their ratios.
