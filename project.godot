@@ -19,6 +19,7 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 MoonveilSettings="*res://scripts/moonveil_settings.gd"
 MoonveilMeta="*res://scripts/moonveil_meta.gd"
 MoonveilProfiles="*res://scripts/moonveil_profiles.gd"
+MoonveilDevConsole="*res://scripts/developer_console.gd"
 
 [display]
 

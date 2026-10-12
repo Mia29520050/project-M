@@ -112,3 +112,9 @@ Both models are procedural placeholders rather than rigged art assets. The dueli
 - [x] Shared Pause Menu in Refuge and expedition with Resume, Settings, and confirmed Return to Title
 - [x] Main Menu is the F5 entry scene; Continue opens the Refuge with the saved wayfarer
 - [x] Headless smoke tests for Main Menu, Refuge and Whispering Woods; GUI-tested Settings, Credits, New Journey, Pause, and Continue/return-to-title flow
+
+
+## Developer tools — implemented
+- [x] In-game console on F10 or backtick, persistent across scenes, with Up/Down command history and clearable output
+- [x] Allow-listed scene/profile/status/settings commands plus run-only XP, teleport, heal/nonlethal damage, spawn/clear enemies, time scaling, and defeat/revive tests
+- [x] Developer console pauses game input while open and has no shell/eval command path

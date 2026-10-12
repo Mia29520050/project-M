@@ -546,6 +546,10 @@ func _show_death_panel() -> void:
 	if is_instance_valid(death_panel):
 		death_panel.show()
 
+func _hide_death_panel() -> void:
+	if is_instance_valid(death_panel):
+		death_panel.hide()
+
 func _refresh_potion_hud() -> void:
 	if not is_instance_valid(player) or not is_instance_valid(potion_label):
 		return

@@ -475,6 +475,48 @@ func gain_xp(amount: int) -> void:
 func is_defeated() -> bool:
 	return _defeated
 
+func debug_take_nonlethal_damage(amount: int) -> int:
+	# Bypass the normal hit cooldown so repeated console tests are deterministic.
+	if _defeated or hp <= 1:
+		return 0
+	_invulnerability_timer = 0.0
+	_hit_invulnerability_active = false
+	_end_dodge_collision_phase()
+	var applied_damage := mini(maxi(1, amount), hp - 1)
+	take_damage(applied_damage)
+	return applied_damage
+
+func debug_kill() -> void:
+	# Always exercise the defeat path even if the player was briefly invulnerable.
+	if _defeated:
+		return
+	_invulnerability_timer = 0.0
+	_hit_invulnerability_active = false
+	_end_dodge_collision_phase()
+	hp = maxi(1, hp)
+	take_damage(hp)
+
+func debug_revive() -> void:
+	# Developer-console-only recovery path used for testing the defeat flow.
+	_defeated = false
+	hp = max_hp
+	mana = max_mana
+	dodge_charges = max_dodge_charges
+	_dodge_timer = 0.0
+	_dodge_recharge_timer = 0.0
+	_dodge_direction = Vector3.ZERO
+	_invulnerability_timer = 0.0
+	_hit_invulnerability_active = false
+	_hit_flash_timer = 0.0
+	_hit_blink_timer = 0.0
+	_hit_blink_visible = true
+	velocity = Vector3.ZERO
+	_end_dodge_collision_phase()
+	if is_instance_valid(_visual_root):
+		_visual_root.visible = true
+	_set_player_hit_flash(false)
+	stats_changed.emit()
+
 func take_damage(amount: int) -> void:
 	if _defeated or _invulnerability_timer > 0.0: return
 	hp = maxi(0, hp - amount)
@@ -494,7 +536,7 @@ func take_damage(amount: int) -> void:
 		# The death panel is the only death message; end the run after a short delay.
 		var game_tree := get_tree()
 		await game_tree.create_timer(2.0, false).timeout
-		if not is_inside_tree(): return
+		if not is_inside_tree() or not _defeated: return
 		var scene_change_error: Error = game_tree.change_scene_to_file("res://scenes/refuge.tscn")
 		if scene_change_error != OK:
 			push_error("Moonveil failed to return to the Refuge after death (error %d)." % scene_change_error)
