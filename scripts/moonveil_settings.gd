@@ -1,5 +1,7 @@
 extends Node
 
+signal settings_changed
+
 const SETTINGS_PATH := "user://moonveil_settings.cfg"
 const MODE_WINDOWED := "Windowed"
 const MODE_BORDERLESS := "Borderless Fullscreen"
@@ -10,14 +12,35 @@ const DEFAULT_VOLUME := 0.82
 const DEFAULT_VSYNC := true
 const DEFAULT_MAX_FPS := 60
 const FPS_LIMIT_OPTIONS: Array[int] = [30, 60, 90, 120, 144, 240, 0]
+const GRAPHICS_QUALITY_OPTIONS: Array[String] = ["Low", "Balanced", "High"]
+const CONTROL_ACTIONS := [
+	{"action": "move_up", "label": "Move forward", "group": "DI CHUYỂN"},
+	{"action": "move_down", "label": "Move backward", "group": "DI CHUYỂN"},
+	{"action": "move_left", "label": "Move left", "group": "DI CHUYỂN"},
+	{"action": "move_right", "label": "Move right", "group": "DI CHUYỂN"},
+	{"action": "attack", "label": "Attack", "group": "CHIẾN ĐẤU"},
+	{"action": "dodge", "label": "Dodge", "group": "CHIẾN ĐẤU"},
+	{"action": "moonbolt", "label": "Moonbolt / Skill", "group": "KỸ NĂNG"},
+	{"action": "interact", "label": "Interact / Shrine", "group": "TƯƠNG TÁC"},
+	{"action": "potion_minor", "label": "Minor healing potion", "group": "VẬT PHẨM"},
+	{"action": "potion_standard", "label": "Standard healing potion", "group": "VẬT PHẨM"},
+	{"action": "potion_greater", "label": "Greater healing potion", "group": "VẬT PHẨM"},
+	{"action": "inventory", "label": "Open satchel", "group": "GIAO DIỆN"},
+	{"action": "pause", "label": "Pause / Menu", "group": "GIAO DIỆN"}
+]
 
 var master_volume: float = DEFAULT_VOLUME
 var display_mode: String = MODE_WINDOWED
 var windowed_resolution: String = DEFAULT_RESOLUTION
 var vsync_enabled: bool = DEFAULT_VSYNC
 var max_fps: int = DEFAULT_MAX_FPS
+var graphics_quality: String = "Balanced"
+var confirm_return_to_title: bool = true
+var show_control_hints: bool = true
 
 func _ready() -> void:
+	_apply_default_control_bindings()
+	get_tree().node_added.connect(_on_tree_node_added)
 	var config := ConfigFile.new()
 	if config.load(SETTINGS_PATH) == OK:
 		master_volume = clampf(float(config.get_value("audio", "master_volume", DEFAULT_VOLUME)), 0.0, 1.0)
@@ -29,9 +52,17 @@ func _ready() -> void:
 		windowed_resolution = String(config.get_value("display", "windowed_resolution", DEFAULT_RESOLUTION))
 		vsync_enabled = bool(config.get_value("display", "vsync", DEFAULT_VSYNC))
 		max_fps = int(config.get_value("performance", "max_fps", DEFAULT_MAX_FPS))
+		graphics_quality = String(config.get_value("graphics", "quality", "Balanced"))
+		if graphics_quality not in GRAPHICS_QUALITY_OPTIONS:
+			graphics_quality = "Balanced"
+		confirm_return_to_title = bool(config.get_value("interface", "confirm_return_to_title", true))
+		show_control_hints = bool(config.get_value("interface", "show_control_hints", true))
+		_load_saved_control_bindings(config)
 	var available_resolutions := get_available_resolutions()
 	if windowed_resolution not in available_resolutions:
 		windowed_resolution = DEFAULT_RESOLUTION if DEFAULT_RESOLUTION in available_resolutions else available_resolutions[0]
+	if max_fps not in FPS_LIMIT_OPTIONS:
+		max_fps = DEFAULT_MAX_FPS
 	_apply_all()
 	_save() # Also migrates older moonveil_settings.cfg files to the windowed default.
 
@@ -59,6 +90,7 @@ func set_master_volume(value: float) -> void:
 	master_volume = clampf(value, 0.0, 1.0)
 	_apply_audio()
 	_save()
+	settings_changed.emit()
 
 func set_display_mode(value: String) -> void:
 	if value not in get_display_mode_options():
@@ -66,6 +98,7 @@ func set_display_mode(value: String) -> void:
 	display_mode = value
 	_apply_display()
 	_save()
+	settings_changed.emit()
 
 func set_windowed_resolution(value: String) -> void:
 	if value not in get_available_resolutions():
@@ -74,11 +107,13 @@ func set_windowed_resolution(value: String) -> void:
 	if display_mode == MODE_WINDOWED:
 		_apply_display()
 	_save()
+	settings_changed.emit()
 
 func set_vsync(enabled: bool) -> void:
 	vsync_enabled = enabled
 	_apply_vsync()
 	_save()
+	settings_changed.emit()
 
 func set_max_fps(value: int) -> void:
 	if value not in FPS_LIMIT_OPTIONS:
@@ -86,6 +121,7 @@ func set_max_fps(value: int) -> void:
 	max_fps = value
 	_apply_fps_limit()
 	_save()
+	settings_changed.emit()
 
 func reset_defaults() -> void:
 	master_volume = DEFAULT_VOLUME
@@ -93,14 +129,20 @@ func reset_defaults() -> void:
 	windowed_resolution = DEFAULT_RESOLUTION if DEFAULT_RESOLUTION in get_available_resolutions() else get_available_resolutions()[0]
 	vsync_enabled = DEFAULT_VSYNC
 	max_fps = DEFAULT_MAX_FPS
+	graphics_quality = "Balanced"
+	confirm_return_to_title = true
+	show_control_hints = true
+	_apply_default_control_bindings()
 	_apply_all()
 	_save()
+	settings_changed.emit()
 
 func _apply_all() -> void:
 	_apply_audio()
 	_apply_display()
 	_apply_vsync()
 	_apply_fps_limit()
+	_apply_graphics()
 
 func _apply_audio() -> void:
 	var master_bus := AudioServer.get_bus_index("Master")
@@ -146,6 +188,266 @@ func _save() -> void:
 	config.set_value("display", "windowed_resolution", windowed_resolution)
 	config.set_value("display", "vsync", vsync_enabled)
 	config.set_value("performance", "max_fps", max_fps)
+	config.set_value("graphics", "quality", graphics_quality)
+	config.set_value("interface", "confirm_return_to_title", confirm_return_to_title)
+	config.set_value("interface", "show_control_hints", show_control_hints)
+	for item in CONTROL_ACTIONS:
+		var action := String(item["action"])
+		var events := InputMap.action_get_events(action) if InputMap.has_action(action) else []
+		if not events.is_empty():
+			config.set_value("controls", action, _event_to_data(events[0]))
 	var error := config.save(SETTINGS_PATH)
 	if error != OK:
 		push_warning("Moonveil could not save settings (error %d)." % error)
+
+
+func get_control_actions() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for item in CONTROL_ACTIONS:
+		result.append(item.duplicate(true))
+	return result
+
+func get_control_binding_label(action: String) -> String:
+	if not InputMap.has_action(action):
+		return "UNAVAILABLE"
+	var events := InputMap.action_get_events(action)
+	if events.is_empty():
+		return "UNBOUND"
+	return _event_label(events[0])
+
+func set_control_binding(action: String, event: InputEvent) -> String:
+	if not _is_rebindable_action(action):
+		return "That action cannot be rebound."
+	if not (event is InputEventKey or event is InputEventMouseButton):
+		return "Choose a keyboard key or mouse button."
+	var candidate := event.duplicate() as InputEvent
+	if candidate is InputEventKey:
+		var key_event := candidate as InputEventKey
+		key_event.pressed = false
+		key_event.echo = false
+	if candidate is InputEventMouseButton:
+		(candidate as InputEventMouseButton).pressed = false
+	var conflict := _find_binding_conflict(action, candidate)
+	if not conflict.is_empty():
+		return "Already used by %s." % conflict
+	InputMap.action_erase_events(action)
+	InputMap.action_add_event(action, candidate)
+	_save()
+	settings_changed.emit()
+	return ""
+
+func reset_control_bindings() -> void:
+	_apply_default_control_bindings()
+	_save()
+	settings_changed.emit()
+
+func set_graphics_quality(value: String) -> void:
+	if value not in GRAPHICS_QUALITY_OPTIONS:
+		return
+	graphics_quality = value
+	_apply_graphics()
+	_save()
+	settings_changed.emit()
+
+func set_confirm_return_to_title(enabled: bool) -> void:
+	confirm_return_to_title = enabled
+	_save()
+	settings_changed.emit()
+
+func set_show_control_hints(enabled: bool) -> void:
+	show_control_hints = enabled
+	_save()
+	settings_changed.emit()
+
+func _is_rebindable_action(action: String) -> bool:
+	for item in CONTROL_ACTIONS:
+		if String(item["action"]) == action:
+			return InputMap.has_action(action)
+	return false
+
+func _build_default_control_bindings() -> Dictionary:
+	return {
+		"move_up": _make_key_event(KEY_W),
+		"move_down": _make_key_event(KEY_S),
+		"move_left": _make_key_event(KEY_A),
+		"move_right": _make_key_event(KEY_D),
+		"attack": _make_mouse_event(MOUSE_BUTTON_LEFT),
+		"dodge": _make_key_event(KEY_SPACE),
+		"moonbolt": _make_key_event(KEY_Q),
+		"interact": _make_key_event(KEY_E),
+		"potion_minor": _make_key_event(KEY_1),
+		"potion_standard": _make_key_event(KEY_2),
+		"potion_greater": _make_key_event(KEY_3),
+		"inventory": _make_key_event(KEY_I),
+		"pause": _make_key_event(KEY_ESCAPE, false)
+	}
+
+func _make_key_event(code: Key, physical: bool = true) -> InputEventKey:
+	var event := InputEventKey.new()
+	if physical:
+		event.physical_keycode = code
+	else:
+		event.keycode = code
+	return event
+
+func _make_mouse_event(button: MouseButton) -> InputEventMouseButton:
+	var event := InputEventMouseButton.new()
+	event.button_index = button
+	return event
+
+func _apply_default_control_bindings() -> void:
+	var defaults := _build_default_control_bindings()
+	for action in defaults:
+		if not InputMap.has_action(action):
+			continue
+		InputMap.action_erase_events(action)
+		InputMap.action_add_event(action, (defaults[action] as InputEvent).duplicate())
+
+func _load_saved_control_bindings(config: ConfigFile) -> void:
+	# Clear all managed actions first so valid saved layouts can reuse a key that
+	# another action has moved away from (e.g. swapping WASD for arrow keys).
+	var saved_events: Dictionary = {}
+	for item in CONTROL_ACTIONS:
+		var action := String(item["action"])
+		if config.has_section_key("controls", action):
+			var data: Variant = config.get_value("controls", action, {})
+			if data is Dictionary:
+				var event := _data_to_event(data as Dictionary)
+				if event != null:
+					saved_events[action] = event
+		if InputMap.has_action(action):
+			InputMap.action_erase_events(action)
+
+	# Custom saved entries take priority over defaults; invalid duplicate entries
+	# are skipped. A second pass fills remaining actions with non-conflicting defaults.
+	for item in CONTROL_ACTIONS:
+		var action := String(item["action"])
+		if not saved_events.has(action):
+			continue
+		var event := saved_events[action] as InputEvent
+		if _find_binding_conflict(action, event).is_empty():
+			InputMap.action_add_event(action, event)
+	for action in _build_default_control_bindings():
+		if not InputMap.has_action(action) or not InputMap.action_get_events(action).is_empty():
+			continue
+		var default_event := _build_default_control_bindings()[action] as InputEvent
+		if _find_binding_conflict(action, default_event).is_empty():
+			InputMap.action_add_event(action, default_event.duplicate())
+
+func _find_binding_conflict(action: String, candidate: InputEvent) -> String:
+	var signature := _binding_signature(candidate)
+	for item in CONTROL_ACTIONS:
+		var other_action := String(item["action"])
+		if other_action == action or not InputMap.has_action(other_action):
+			continue
+		for existing in InputMap.action_get_events(other_action):
+			if _binding_signature(existing) == signature:
+				return String(item["label"])
+	return ""
+
+func _binding_signature(event: InputEvent) -> String:
+	if event is InputEventKey:
+		var key_event := event as InputEventKey
+		var code := int(key_event.physical_keycode) if key_event.physical_keycode != KEY_NONE else int(key_event.keycode)
+		return "key:%d:%s:%s:%s:%s" % [code, key_event.shift_pressed, key_event.ctrl_pressed, key_event.alt_pressed, key_event.meta_pressed]
+	if event is InputEventMouseButton:
+		return "mouse:%d" % int((event as InputEventMouseButton).button_index)
+	return "other:%s" % event.as_text()
+
+func _event_label(event: InputEvent) -> String:
+	if event is InputEventKey:
+		var key_event := event as InputEventKey
+		var code := key_event.physical_keycode if key_event.physical_keycode != KEY_NONE else key_event.keycode
+		var key_name := OS.get_keycode_string(code)
+		match code:
+			KEY_ESCAPE: key_name = "ESC"
+			KEY_SPACE: key_name = "SPACE"
+			KEY_ENTER: key_name = "ENTER"
+			KEY_KP_ENTER: key_name = "NUM ENTER"
+			KEY_TAB: key_name = "TAB"
+			KEY_BACKSPACE: key_name = "BACKSPACE"
+			KEY_DELETE: key_name = "DELETE"
+			KEY_UP: key_name = "↑"
+			KEY_DOWN: key_name = "↓"
+			KEY_LEFT: key_name = "←"
+			KEY_RIGHT: key_name = "→"
+		if key_event.ctrl_pressed:
+			key_name = "CTRL+" + key_name
+		if key_event.alt_pressed:
+			key_name = "ALT+" + key_name
+		if key_event.shift_pressed:
+			key_name = "SHIFT+" + key_name
+		if key_event.meta_pressed:
+			key_name = "META+" + key_name
+		return key_name.to_upper()
+	if event is InputEventMouseButton:
+		var button := (event as InputEventMouseButton).button_index
+		match button:
+			MOUSE_BUTTON_LEFT: return "MOUSE 1 · LEFT"
+			MOUSE_BUTTON_RIGHT: return "MOUSE 2 · RIGHT"
+			MOUSE_BUTTON_MIDDLE: return "MOUSE 3 · MIDDLE"
+			_: return "MOUSE %d" % int(button)
+	return event.as_text().to_upper()
+
+func _event_to_data(event: InputEvent) -> Dictionary:
+	if event is InputEventKey:
+		var key_event := event as InputEventKey
+		return {
+			"kind": "key",
+			"keycode": int(key_event.keycode),
+			"physical_keycode": int(key_event.physical_keycode),
+			"shift": key_event.shift_pressed,
+			"ctrl": key_event.ctrl_pressed,
+			"alt": key_event.alt_pressed,
+			"meta": key_event.meta_pressed
+		}
+	if event is InputEventMouseButton:
+		return {"kind": "mouse", "button_index": int((event as InputEventMouseButton).button_index)}
+	return {}
+
+func _data_to_event(data: Dictionary) -> InputEvent:
+	match String(data.get("kind", "")):
+		"key":
+			var event := InputEventKey.new()
+			event.keycode = int(data.get("keycode", 0)) as Key
+			event.physical_keycode = int(data.get("physical_keycode", 0)) as Key
+			event.shift_pressed = bool(data.get("shift", false))
+			event.ctrl_pressed = bool(data.get("ctrl", false))
+			event.alt_pressed = bool(data.get("alt", false))
+			event.meta_pressed = bool(data.get("meta", false))
+			if event.keycode == KEY_NONE and event.physical_keycode == KEY_NONE:
+				return null
+			return event
+		"mouse":
+			var button_index := int(data.get("button_index", 0))
+			if button_index < MOUSE_BUTTON_LEFT or button_index > MOUSE_BUTTON_XBUTTON2:
+				return null
+			return _make_mouse_event(button_index as MouseButton)
+	return null
+
+func _on_tree_node_added(node: Node) -> void:
+	if node is DirectionalLight3D:
+		if not node.has_meta("moonveil_default_shadow_enabled"):
+			node.set_meta("moonveil_default_shadow_enabled", (node as DirectionalLight3D).shadow_enabled)
+		call_deferred("_apply_light_quality", node)
+
+func _apply_graphics() -> void:
+	if is_instance_valid(get_tree().root):
+		match graphics_quality:
+			"Low": get_tree().root.msaa_3d = Viewport.MSAA_DISABLED
+			"Balanced": get_tree().root.msaa_3d = Viewport.MSAA_2X
+			"High": get_tree().root.msaa_3d = Viewport.MSAA_4X
+	var scene := get_tree().current_scene
+	if is_instance_valid(scene):
+		for node in scene.find_children("*", "DirectionalLight3D", true, false):
+			if not node.has_meta("moonveil_default_shadow_enabled"):
+				node.set_meta("moonveil_default_shadow_enabled", (node as DirectionalLight3D).shadow_enabled)
+			_apply_light_quality(node)
+
+func _apply_light_quality(node: Node) -> void:
+	if not is_instance_valid(node) or not (node is DirectionalLight3D):
+		return
+	var light := node as DirectionalLight3D
+	if not light.has_meta("moonveil_default_shadow_enabled"):
+		light.set_meta("moonveil_default_shadow_enabled", light.shadow_enabled)
+	light.shadow_enabled = bool(light.get_meta("moonveil_default_shadow_enabled")) and graphics_quality != "Low"

@@ -5,10 +5,12 @@ const DUELIST_SCENE = preload("res://scenes/sword_duelist.tscn")
 const ENEMY_SCENE = preload("res://scenes/enemy.tscn")
 const BOLT_SCENE = preload("res://scenes/magic_bolt.tscn")
 const PAUSE_MENU_SCENE: PackedScene = preload("res://scenes/pause_menu.tscn")
+const INVENTORY_PANEL_SCRIPT: Script = preload("res://scripts/inventory_panel.gd")
 
 var player: Node3D
 var camera: Camera3D
 var hud_layer: CanvasLayer
+var inventory_layer: CanvasLayer
 var hp_bar: ProgressBar
 var mana_bar: ProgressBar
 var xp_bar: ProgressBar
@@ -22,8 +24,9 @@ var weapon_label: Label
 var shard_label: Label
 var quest_label: Label
 var enemy_label: Label
-var inventory_panel: PanelContainer
-var inventory_label: Label
+var inventory_panel: Control
+var controls_hint_panel: Control
+var controls_hint_label: Label
 var pause_menu: CanvasLayer
 var death_panel: PanelContainer
 var toast_panel: PanelContainer
@@ -43,6 +46,8 @@ func _ready() -> void:
 	_create_camera()
 	_build_hud()
 	_build_pause_menu()
+	if not MoonveilSettings.settings_changed.is_connected(_on_settings_changed):
+		MoonveilSettings.settings_changed.connect(_on_settings_changed)
 	for spawn_point in [
 		Vector3(-3.0, 0.0, 1.0),
 		Vector3(4.0, 0.0, 0.0),
@@ -63,6 +68,33 @@ func _process(delta: float) -> void:
 	_refresh_potion_hud()
 	if is_instance_valid(player) and player.character_id == "sword_duelist" and is_instance_valid(shard_label):
 		shard_label.text = player.call("get_skill_status_text")
+
+
+func _on_settings_changed() -> void:
+	if is_instance_valid(controls_hint_panel):
+		controls_hint_panel.visible = MoonveilSettings.show_control_hints
+	if is_instance_valid(controls_hint_label):
+		controls_hint_label.text = _build_controls_hint_text()
+
+func _build_controls_hint_text() -> String:
+	var movement := "%s/%s/%s/%s" % [
+		MoonveilSettings.get_control_binding_label("move_up"),
+		MoonveilSettings.get_control_binding_label("move_left"),
+		MoonveilSettings.get_control_binding_label("move_down"),
+		MoonveilSettings.get_control_binding_label("move_right")
+	]
+	return "MOVE %s · ATK %s · DODGE %s · POT %s/%s/%s · SKILL %s · BAG %s · INTERACT %s · PAUSE %s" % [
+		movement,
+		MoonveilSettings.get_control_binding_label("attack"),
+		MoonveilSettings.get_control_binding_label("dodge"),
+		MoonveilSettings.get_control_binding_label("potion_minor"),
+		MoonveilSettings.get_control_binding_label("potion_standard"),
+		MoonveilSettings.get_control_binding_label("potion_greater"),
+		MoonveilSettings.get_control_binding_label("moonbolt"),
+		MoonveilSettings.get_control_binding_label("inventory"),
+		MoonveilSettings.get_control_binding_label("interact"),
+		MoonveilSettings.get_control_binding_label("pause")
+	]
 
 func _physics_process(_delta: float) -> void:
 	if get_tree().paused:
@@ -87,6 +119,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _inventory_paused:
 			_inventory_paused = false
 			inventory_panel.hide()
+			hud_layer.visible = true
 			_set_paused(false)
 		elif get_tree().paused:
 			_set_paused(false)
@@ -99,9 +132,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _inventory_paused:
 			_inventory_paused = false
 			inventory_panel.hide()
+			hud_layer.visible = true
 			_set_paused(false)
 		elif not get_tree().paused:
 			_inventory_paused = true
+			inventory_panel.refresh(player)
+			hud_layer.visible = false
 			inventory_panel.show()
 			_set_paused(true)
 		_refresh_hud()
@@ -430,6 +466,14 @@ func _build_hud() -> void:
 	full.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_layer.add_child(full)
 
+	# Keep inventory on a dedicated layer above the HUD so its backdrop can blur
+	# both the world and HUD without changing gameplay or the HUD itself.
+	inventory_layer = CanvasLayer.new()
+	inventory_layer.name = "InventoryCanvasLayer"
+	inventory_layer.layer = 9
+	inventory_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(inventory_layer)
+
 	var stats_panel := _make_panel(full, Vector2(326, 240))
 	stats_panel.position = Vector2(22, 22)
 	var stats_box := VBoxContainer.new()
@@ -464,21 +508,20 @@ func _build_hud() -> void:
 	weapon_label = _make_label(quest_box, "Weapon: Apprentice Wand", 12, Color(0.69, 0.92, 0.96))
 	shard_label = _make_label(quest_box, "Moonshards: 0 / 3", 12, Color(0.79, 0.69, 1.0))
 
-	var controls_panel := _make_panel(full, Vector2(940, 72))
-	controls_panel.anchor_left = 0.5
-	controls_panel.anchor_right = 0.5
-	controls_panel.anchor_top = 1.0
-	controls_panel.anchor_bottom = 1.0
-	controls_panel.offset_left = -470.0
-	controls_panel.offset_right = 470.0
-	controls_panel.offset_top = -90.0
-	controls_panel.offset_bottom = -14.0
-	var controls_text := "WASD Move · Mouse 1 Attack · SPACE Dodge · 1/2/3 Healing · Q Moonbolt · I Satchel · E Shrine · ESC Pause"
-	if player.character_id == "sword_duelist":
-		controls_text = "WASD Move · Mouse 1 3-Hit Combo · SPACE Dodge · Q Crescent Lunge · 1/2/3 Healing · I Satchel · ESC Pause"
-	var controls := _make_label(controls_panel, controls_text, 12, Color(0.79, 0.86, 1.0))
-	controls.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	controls.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	controls_hint_panel = _make_panel(full, Vector2(940, 72))
+	controls_hint_panel.anchor_left = 0.5
+	controls_hint_panel.anchor_right = 0.5
+	controls_hint_panel.anchor_top = 1.0
+	controls_hint_panel.anchor_bottom = 1.0
+	controls_hint_panel.offset_left = -470.0
+	controls_hint_panel.offset_right = 470.0
+	controls_hint_panel.offset_top = -90.0
+	controls_hint_panel.offset_bottom = -14.0
+	controls_hint_panel.visible = MoonveilSettings.show_control_hints
+	controls_hint_label = _make_label(controls_hint_panel, _build_controls_hint_text(), 11, Color(0.79, 0.86, 1.0))
+	controls_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	controls_hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	controls_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 	toast_panel = _make_panel(full, Vector2(500, 52))
 	toast_panel.anchor_left = 0.5
@@ -494,28 +537,13 @@ func _build_hud() -> void:
 	toast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	toast_panel.hide()
 
-	inventory_panel = _make_panel(full, Vector2(420, 300))
-	inventory_panel.anchor_left = 0.5
-	inventory_panel.anchor_right = 0.5
-	inventory_panel.anchor_top = 0.5
-	inventory_panel.anchor_bottom = 0.5
-	inventory_panel.offset_left = -210.0
-	inventory_panel.offset_right = 210.0
-	inventory_panel.offset_top = -150.0
-	inventory_panel.offset_bottom = 150.0
-	var inventory_box := VBoxContainer.new()
-	inventory_box.add_theme_constant_override("separation", 10)
-	inventory_panel.add_child(inventory_box)
-	_make_label(inventory_box, "✦  ADVENTURER'S SATCHEL", 18, Color(0.78, 0.85, 1.0))
-	inventory_label = _make_label(inventory_box, "", 14)
-	inventory_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var inventory_text := "Potions recover HP gradually: 1 Minor (+24 over 3s), 2 Standard (+45 over 4s), 3 Greater (+70 over 5s). Only one recovery can run at a time; being hit does not interrupt it for now.\nQ: Moonbolt targets the nearest Voidling within 18m (24 base damage, 15 Mana).\nSPACE: dodge; charges recharge over time. E: awaken the staff after collecting 3 Moonshards. I or ESC closes this satchel."
-	if player.character_id == "sword_duelist":
-		inventory_text = "Potions recover HP gradually: 1 Minor (+24 over 3s), 2 Standard (+45 over 4s), 3 Greater (+70 over 5s). Only one recovery runs at a time.\nMouse 1: a three-strike melee chain (16 / 20 / 28 damage).\nQ: Crescent Lunge spends 20 stamina, dashes through combat and has a 4.5-second cooldown. SPACE: defensive dodge. I or ESC closes this satchel."
-	var inventory_hint := _make_label(inventory_box, inventory_text, 12, Color(0.67, 0.80, 0.94))
-	inventory_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	inventory_panel = Control.new()
+	inventory_panel.name = "InventoryPanel"
+	inventory_panel.set_script(INVENTORY_PANEL_SCRIPT)
+	inventory_panel.process_mode = Node.PROCESS_MODE_ALWAYS
+	inventory_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	inventory_layer.add_child(inventory_panel)
 	inventory_panel.hide()
-
 
 	# A dedicated death banner stays visible for the full shrine-return delay,
 	# instead of relying only on the short-lived toast notification.
@@ -588,21 +616,8 @@ func _refresh_hud() -> void:
 	quest_label.text = "Quest complete!" if quest_completed else "Defeat 5 Voidlings  (%d/5)" % mini(defeated_count, 5)
 	enemy_label.text = "%d Voidlings in the clearing" % get_tree().get_nodes_in_group("enemies").size()
 	_refresh_dodge_hud()
-	if inventory_panel != null:
-		if player.character_id == "sword_duelist":
-			inventory_label.text = "Level: %d\nHP: %d / %d\nStamina: %d / %d\nXP: %d / %d\n\nWeapon: Training Sword\nCombo damage: 16 / 20 / 28\nCrescent Lunge: 30 damage · 20 stamina · 4.5s cooldown\nPotions — Minor: %d · Standard: %d · Greater: %d%s" % [
-				player.level, player.hp, player.max_hp, player.mana, player.max_mana,
-				player.xp, player.xp_to_next, player.minor_potions, player.standard_potions, player.greater_potions,
-				"\nHealing in progress: %.1fs left" % player._healing_time_remaining if player._healing_active else ""
-			]
-		else:
-			inventory_label.text = "Level: %d\nHP: %d / %d\nMana: %d / %d\nXP: %d / %d\n\nWeapon: %s\nStrike damage: %d\nMoonbolt damage: %d\nMoonshards: %d / 3\nPotions — Minor: %d · Standard: %d · Greater: %d%s" % [
-				player.level, player.hp, player.max_hp, player.mana, player.max_mana,
-				player.xp, player.xp_to_next, player.weapon_name, player.base_damage + player.weapon_bonus,
-				player.magic_damage + player.weapon_bonus * 2, player.moon_shards,
-				player.minor_potions, player.standard_potions, player.greater_potions,
-				"\nHealing in progress: %.1fs left" % player._healing_time_remaining if player._healing_active else ""
-			]
+	if is_instance_valid(inventory_panel) and inventory_panel.visible:
+		inventory_panel.refresh(player)
 
 func _show_toast(message: String) -> void:
 	if not is_instance_valid(toast_panel):

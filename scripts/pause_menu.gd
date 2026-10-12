@@ -11,11 +11,15 @@ var _settings_panel: Control
 var _resume_button: Button
 var _stay_button: Button
 var _leave_button: Button
+var _footer_label: Label
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	layer = 30
 	_build_ui()
+	if not MoonveilSettings.settings_changed.is_connected(_on_settings_changed):
+		MoonveilSettings.settings_changed.connect(_on_settings_changed)
+	_update_pause_hint()
 	hide()
 
 func _build_ui() -> void:
@@ -69,12 +73,11 @@ func _build_ui() -> void:
 	var title_button := _make_button("RETURN TO TITLE", false)
 	title_button.pressed.connect(_open_return_confirmation)
 	column.add_child(title_button)
-	var footer := Label.new()
-	footer.text = "Press Esc to resume"
-	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	footer.add_theme_font_size_override("font_size", 11)
-	footer.add_theme_color_override("font_color", Color(0.50, 0.64, 0.79))
-	column.add_child(footer)
+	_footer_label = Label.new()
+	_footer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_footer_label.add_theme_font_size_override("font_size", 11)
+	_footer_label.add_theme_color_override("font_color", Color(0.50, 0.64, 0.79))
+	column.add_child(_footer_label)
 
 	_confirm_panel = _make_panel(Vector2(460, 220))
 	_confirm_panel.anchor_left = 0.5
@@ -163,6 +166,9 @@ func _on_settings_closed() -> void:
 	_resume_button.grab_focus()
 
 func _open_return_confirmation() -> void:
+	if not MoonveilSettings.confirm_return_to_title:
+		_confirm_return_to_title()
+		return
 	_pause_panel.hide()
 	_confirm_panel.show()
 	_leave_button.grab_focus()
@@ -190,6 +196,13 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		_close_return_confirmation()
 	else:
 		_on_resume()
+
+func _on_settings_changed() -> void:
+	_update_pause_hint()
+
+func _update_pause_hint() -> void:
+	if is_instance_valid(_footer_label):
+		_footer_label.text = "Press %s to resume" % MoonveilSettings.get_control_binding_label("pause")
 
 func open_menu() -> void:
 	show()

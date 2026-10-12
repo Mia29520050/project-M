@@ -26,6 +26,7 @@ var character_selection_panel: PanelContainer
 var selection_heading: Label
 var selection_details: Label
 var confirm_button: Button
+var _cancel_selection_button: Button
 var selection_status: Label
 var selection_hint_label: Label
 var hub_info_panel: PanelContainer
@@ -44,9 +45,22 @@ func _ready() -> void:
 	_build_hud()
 	_build_character_selection_ui()
 	_build_pause_menu()
+	if not MoonveilSettings.settings_changed.is_connected(_on_settings_changed):
+		MoonveilSettings.settings_changed.connect(_on_settings_changed)
 	_create_player()
 	_create_camera()
 	_refresh_prompt()
+
+func _on_settings_changed() -> void:
+	if is_instance_valid(confirm_button):
+		confirm_button.text = "CONFIRM WAYFARER  ·  %s" % MoonveilSettings.get_control_binding_label("interact")
+	if is_instance_valid(_cancel_selection_button):
+		_cancel_selection_button.text = "BACK  ·  %s" % MoonveilSettings.get_control_binding_label("pause")
+	if is_instance_valid(selection_hint_label) and _selection_open:
+		if selected_character_id.is_empty():
+			selection_hint_label.text = "Choose a wayfarer to inspect their abilities  ·  %s" % MoonveilSettings.get_control_binding_label("pause")
+		else:
+			selection_hint_label.text = "Click the same wayfarer again or press %s to confirm  ·  %s to return" % [MoonveilSettings.get_control_binding_label("interact"), MoonveilSettings.get_control_binding_label("pause")]
 
 func _process(delta: float) -> void:
 	_showcase_time += delta
@@ -84,7 +98,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _selection_open:
 		if event.is_action_pressed("interact") or (event is InputEventKey and event.pressed and event.keycode in [KEY_ENTER, KEY_KP_ENTER]):
 			if selected_character_id.is_empty():
-				selection_hint_label.text = "Choose a wayfarer first, then press E to confirm."
+				selection_hint_label.text = "Choose a wayfarer first, then press %s to confirm." % MoonveilSettings.get_control_binding_label("interact")
 			else:
 				_confirm_character_selection()
 			get_viewport().set_input_as_handled()
@@ -100,7 +114,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif player.global_position.distance_to(SHRINE_POSITION) <= INTERACT_RANGE:
 			_start_run()
 		else:
-			_show_message("Press E near the Wayfarers' Fire to change heroes, or visit the Moon Shrine to depart.")
+			_show_message("Press %s near the Wayfarers' Fire to change heroes, or visit the Moon Shrine to depart." % MoonveilSettings.get_control_binding_label("interact"))
 
 func _start_run() -> void:
 	if _transitioning:
@@ -740,16 +754,16 @@ func _build_character_selection_ui() -> void:
 	actions.add_theme_constant_override("separation", 12)
 	column.add_child(actions)
 	confirm_button = Button.new()
-	confirm_button.text = "CONFIRM WAYFARER  ·  E"
+	confirm_button.text = "CONFIRM WAYFARER  ·  %s" % MoonveilSettings.get_control_binding_label("interact")
 	confirm_button.custom_minimum_size = Vector2(265.0, 36.0)
 	confirm_button.add_theme_font_size_override("font_size", 13)
 	confirm_button.pressed.connect(_confirm_character_selection)
 	actions.add_child(confirm_button)
-	var cancel_button := Button.new()
-	cancel_button.text = "BACK TO REFUGE  [ESC]"
-	cancel_button.custom_minimum_size = Vector2(150.0, 36.0)
-	cancel_button.pressed.connect(_close_character_selection)
-	actions.add_child(cancel_button)
+	_cancel_selection_button = Button.new()
+	_cancel_selection_button.text = "BACK  ·  %s" % MoonveilSettings.get_control_binding_label("pause")
+	_cancel_selection_button.custom_minimum_size = Vector2(150.0, 36.0)
+	_cancel_selection_button.pressed.connect(_close_character_selection)
+	actions.add_child(_cancel_selection_button)
 	character_selection_panel.hide()
 
 func _on_showcase_input_event(_camera_node: Node, event: InputEvent, _position: Vector3, _normal: Vector3, _shape_idx: int, character_id: String) -> void:
@@ -771,7 +785,7 @@ func _select_character_in_world(character_id: String) -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	_refresh_character_buttons()
 	character_selection_panel.show()
-	selection_hint_label.text = "Click the same wayfarer again or press E to confirm  ·  Esc to return"
+	selection_hint_label.text = "Click the same wayfarer again or press %s to confirm  ·  %s to return" % [MoonveilSettings.get_control_binding_label("interact"), MoonveilSettings.get_control_binding_label("pause")]
 
 func _refresh_character_buttons() -> void:
 	if not is_instance_valid(selection_heading) or not is_instance_valid(selection_details):
@@ -884,9 +898,9 @@ func _refresh_prompt() -> void:
 	elif _initial_selection_required:
 		prompt_label.text = "Click the Wayfarers' Fire to choose your first hero"
 	elif player.global_position.distance_to(CAMPFIRE_POSITION) <= CAMPFIRE_INTERACT_RANGE:
-		prompt_label.text = "Press E at the Wayfarers' Fire to change heroes"
+		prompt_label.text = "Press %s at the Wayfarers' Fire to change heroes" % MoonveilSettings.get_control_binding_label("interact")
 	elif player.global_position.distance_to(SHRINE_POSITION) <= INTERACT_RANGE:
-		prompt_label.text = "Press E at the Moon Shrine to enter Whispering Woods"
+		prompt_label.text = "Press %s at the Moon Shrine to enter Whispering Woods" % MoonveilSettings.get_control_binding_label("interact")
 	else:
 		prompt_label.text = "Explore the Refuge   ·   Wayfarers' Fire: change hero   ·   Moon Shrine: depart"
 	if is_instance_valid(status_label):

@@ -72,7 +72,8 @@ Both models are procedural placeholders rather than rigged art assets. The dueli
 - [ ] Data-driven items, stats and equipment slots (weapon, head, body, accessory)
 - [ ] Robust save/load profile with versioned data and shared-account/character data ownership
 - [x] Audio/display settings stored in user configuration and shared between Main Menu and Pause Menu
-- [ ] Key rebinding and controller support
+- [x] Keyboard/mouse key rebinding with conflict checks, reset-to-defaults, and `user://moonveil_settings.cfg` persistence
+- [ ] Gamepad/controller support
 - [ ] Dodge cooldown UI, more impact feedback and tuning
 - [ ] Basic dialogue and NPC interaction
 
@@ -108,7 +109,8 @@ Both models are procedural placeholders rather than rigged art assets. The dueli
 ## Menu system — implemented
 - [x] Procedural anime-fantasy Main Menu with animated moon backdrop, saved-wayfarer summary, Continue, New Journey, Settings, Credits & Controls, and Quit
 - [x] New Journey confirmation returns to the Refuge's campfire selection without deleting character profiles or permanent progression
-- [x] Reusable Settings panel for master volume, platform-appropriate Windowed/Fullscreen modes, windowed resolution, VSync and FPS limit, persisted to `user://moonveil_settings.cfg`
+- [x] Reusable category-based Settings panel for master volume, platform-appropriate Windowed/Fullscreen modes, windowed resolution, Low/Balanced/High graphics presets, VSync and FPS limit, persisted to `user://moonveil_settings.cfg`
+- [x] Remappable keyboard/mouse controls, duplicate-binding guard, control reset, live key hints, optional HUD hints, and Return-to-Title confirmation preference
 - [x] Shared Pause Menu in Refuge and expedition with Resume, Settings, and confirmed Return to Title
 - [x] Main Menu is the F5 entry scene; Continue opens the Refuge with the saved wayfarer
 - [x] Headless smoke tests for Main Menu, Refuge and Whispering Woods; GUI-tested Settings, Credits, New Journey, Pause, and Continue/return-to-title flow
