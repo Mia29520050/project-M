@@ -29,6 +29,7 @@ var confirm_button: Button
 var _cancel_selection_button: Button
 var selection_status: Label
 var selection_hint_label: Label
+var campfire_hint_label: Label3D
 var hub_info_panel: PanelContainer
 var selected_character_id := ""
 var _showcase_time := 0.0
@@ -52,6 +53,10 @@ func _ready() -> void:
 	_refresh_prompt()
 
 func _on_settings_changed() -> void:
+	if is_instance_valid(campfire_hint_label):
+		campfire_hint_label.text = "WAYFARERS' FIRE\nPRESS %s TO CHANGE HERO" % MoonveilSettings.get_control_binding_label("interact")
+	if is_instance_valid(selection_details):
+		_refresh_character_details()
 	if is_instance_valid(confirm_button):
 		confirm_button.text = "CONFIRM WAYFARER  ·  %s" % MoonveilSettings.get_control_binding_label("interact")
 	if is_instance_valid(_cancel_selection_button):
@@ -376,14 +381,14 @@ func _create_fire_camp() -> void:
 	fire_light.shadow_enabled = false
 	add_child(fire_light)
 
-	var label := Label3D.new()
-	label.text = "WAYFARERS' FIRE\nPRESS E TO CHANGE HERO"
-	label.font_size = 30
-	label.pixel_size = 0.006
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.modulate = Color(1.0, 0.79, 0.62)
-	label.position = CAMPFIRE_POSITION + Vector3(0.0, 2.3, -0.15)
-	add_child(label)
+	campfire_hint_label = Label3D.new()
+	campfire_hint_label.text = "WAYFARERS' FIRE\nPRESS %s TO CHANGE HERO" % MoonveilSettings.get_control_binding_label("interact")
+	campfire_hint_label.font_size = 30
+	campfire_hint_label.pixel_size = 0.006
+	campfire_hint_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	campfire_hint_label.modulate = Color(1.0, 0.79, 0.62)
+	campfire_hint_label.position = CAMPFIRE_POSITION + Vector3(0.0, 2.3, -0.15)
+	add_child(campfire_hint_label)
 
 	var fire_interaction_area := Area3D.new()
 	fire_interaction_area.name = "WayfarersFireInteraction"
@@ -805,14 +810,7 @@ func _refresh_character_buttons() -> void:
 			false if is_selected else true
 		)
 		showcase_selection_rings[index].visible = is_selected
-	if selected_character_id == "sword_duelist":
-		selection_heading.text = "ASTRA VALE  ·  SWORD DUELIST"
-		selection_heading.add_theme_color_override("font_color", Color(1.0, 0.69, 0.82))
-		selection_details.text = "115 HP  ·  35 Stamina\nMouse 1: three-hit chain (16 / 20 / 28)  ·  Q: Crescent Lunge (30 damage, 4.5s cooldown)"
-	else:
-		selection_heading.text = "MOONVEIL MAGE"
-		selection_heading.add_theme_color_override("font_color", Color(0.70, 0.86, 1.0))
-		selection_details.text = "100 HP  ·  60 Mana\nQ: homing Moonbolt  ·  Ranged arcane combat"
+	_refresh_character_details()
 	if is_instance_valid(selection_status):
 		if _initial_selection_required:
 			selection_status.text = "Choose this wayfarer to begin your first journey."
@@ -820,6 +818,18 @@ func _refresh_character_buttons() -> void:
 			selection_status.text = "You're already controlling this hero."
 		else:
 			selection_status.text = "Selected wayfarer — confirm to switch control."
+
+func _refresh_character_details() -> void:
+	if not is_instance_valid(selection_heading) or not is_instance_valid(selection_details):
+		return
+	if selected_character_id == "sword_duelist":
+		selection_heading.text = "ASTRA VALE  ·  SWORD DUELIST"
+		selection_heading.add_theme_color_override("font_color", Color(1.0, 0.69, 0.82))
+		selection_details.text = "115 HP  ·  35 Stamina\n%s: three-hit chain (16 / 20 / 28)  ·  %s: Crescent Lunge (30 damage, 4.5s cooldown)" % [MoonveilSettings.get_control_binding_label("attack"), MoonveilSettings.get_control_binding_label("moonbolt")]
+	else:
+		selection_heading.text = "MOONVEIL MAGE"
+		selection_heading.add_theme_color_override("font_color", Color(0.70, 0.86, 1.0))
+		selection_details.text = "100 HP  ·  60 Mana\n%s: homing Moonbolt  ·  Ranged arcane combat" % MoonveilSettings.get_control_binding_label("moonbolt")
 
 func _open_character_selection() -> void:
 	# Kept for compatibility with old callers; selection is now always centered on the fire.

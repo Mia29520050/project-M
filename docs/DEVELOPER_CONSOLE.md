@@ -26,4 +26,4 @@ Type `help` for the current command list. Supported commands:
 | `clear` | Clear console output |
 | `close` | Close the console |
 
-This is a development tool, not a secure sandbox: the command set is intentionally allow-listed and does not expose arbitrary script evaluation or terminal commands. Do not run character-changing commands if you do not intend to update the saved active character. Inventory-item injection and permanent-currency commands are deliberately omitted until their gameplay and save behavior are implemented.
+The `time_scale` command is temporary: the console resets `Engine.time_scale` to `1.0` when it closes or changes scenes. This is a development tool, not a secure sandbox: the command set is intentionally allow-listed and does not expose arbitrary script evaluation or terminal commands. Do not run character-changing commands if you do not intend to update the saved active character. Inventory-item injection and permanent-currency commands are deliberately omitted until their gameplay and save behavior are implemented.

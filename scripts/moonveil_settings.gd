@@ -13,6 +13,8 @@ const DEFAULT_VSYNC := true
 const DEFAULT_MAX_FPS := 60
 const FPS_LIMIT_OPTIONS: Array[int] = [30, 60, 90, 120, 144, 240, 0]
 const GRAPHICS_QUALITY_OPTIONS: Array[String] = ["Low", "Balanced", "High"]
+# Fixed shortcuts that must remain available to system/debug navigation.
+const RESERVED_KEYCODES: Array[int] = [KEY_F10, KEY_QUOTELEFT, KEY_ASCIITILDE, KEY_ENTER, KEY_KP_ENTER]
 const CONTROL_ACTIONS := [
 	{"action": "move_up", "label": "Move forward", "group": "DI CHUYỂN"},
 	{"action": "move_down", "label": "Move backward", "group": "DI CHUYỂN"},
@@ -215,6 +217,12 @@ func get_control_binding_label(action: String) -> String:
 		return "UNBOUND"
 	return _event_label(events[0])
 
+func get_control_binding_short_label(action: String) -> String:
+	var label := get_control_binding_label(action)
+	if label.begins_with("MOUSE "):
+		return label.replace("MOUSE ", "M").replace(" · LEFT", "").replace(" · RIGHT", "").replace(" · MIDDLE", "")
+	return label
+
 func set_control_binding(action: String, event: InputEvent) -> String:
 	if not _is_rebindable_action(action):
 		return "That action cannot be rebound."
@@ -227,6 +235,10 @@ func set_control_binding(action: String, event: InputEvent) -> String:
 		key_event.echo = false
 	if candidate is InputEventMouseButton:
 		(candidate as InputEventMouseButton).pressed = false
+	if _has_modifier_binding(candidate):
+		return "Modifier combinations are not supported yet; choose a single key or mouse button."
+	if _is_reserved_binding(candidate):
+		return "That key is reserved for a fixed game shortcut."
 	var conflict := _find_binding_conflict(action, candidate)
 	if not conflict.is_empty():
 		return "Already used by %s." % conflict
@@ -264,6 +276,21 @@ func _is_rebindable_action(action: String) -> bool:
 		if String(item["action"]) == action:
 			return InputMap.has_action(action)
 	return false
+
+func _has_modifier_binding(event: InputEvent) -> bool:
+	if not (event is InputEventWithModifiers):
+		return false
+	var modifier_event := event as InputEventWithModifiers
+	# Input action checks here use Godot's default non-exact matching, which ignores
+	# modifiers. Reject chords so Shift+W cannot also trigger an action bound to W.
+	return modifier_event.shift_pressed or modifier_event.ctrl_pressed or modifier_event.alt_pressed or modifier_event.meta_pressed
+
+func _is_reserved_binding(event: InputEvent) -> bool:
+	if not (event is InputEventKey):
+		return false
+	var key_event := event as InputEventKey
+	# Fixed handlers look at keycode alone, so modifier variants remain reserved too.
+	return int(key_event.keycode) in RESERVED_KEYCODES or int(key_event.physical_keycode) in RESERVED_KEYCODES
 
 func _build_default_control_bindings() -> Dictionary:
 	return {
@@ -314,7 +341,10 @@ func _load_saved_control_bindings(config: ConfigFile) -> void:
 			if data is Dictionary:
 				var event := _data_to_event(data as Dictionary)
 				if event != null:
-					saved_events[action] = event
+					if _is_reserved_binding(event) or _has_modifier_binding(event):
+						push_warning("Ignoring unsupported saved key for control action '%s'." % action)
+					else:
+						saved_events[action] = event
 		if InputMap.has_action(action):
 			InputMap.action_erase_events(action)
 
@@ -327,12 +357,24 @@ func _load_saved_control_bindings(config: ConfigFile) -> void:
 		var event := saved_events[action] as InputEvent
 		if _find_binding_conflict(action, event).is_empty():
 			InputMap.action_add_event(action, event)
-	for action in _build_default_control_bindings():
+	var default_bindings := _build_default_control_bindings()
+	for action in default_bindings:
 		if not InputMap.has_action(action) or not InputMap.action_get_events(action).is_empty():
 			continue
-		var default_event := _build_default_control_bindings()[action] as InputEvent
+		var default_event := default_bindings[action] as InputEvent
 		if _find_binding_conflict(action, default_event).is_empty():
 			InputMap.action_add_event(action, default_event.duplicate())
+
+	# A conflicting/corrupt layout can consume an action's default key before its
+	# fallback is applied. Never leave the player with an invisible/unbound action.
+	var unbound_actions: Array[String] = []
+	for item in CONTROL_ACTIONS:
+		var action := String(item["action"])
+		if InputMap.has_action(action) and InputMap.action_get_events(action).is_empty():
+			unbound_actions.append(action)
+	if not unbound_actions.is_empty():
+		push_warning("Saved controls left actions unbound (%s); restored all default controls." % ", ".join(unbound_actions))
+		_apply_default_control_bindings()
 
 func _find_binding_conflict(action: String, candidate: InputEvent) -> String:
 	var signature := _binding_signature(candidate)

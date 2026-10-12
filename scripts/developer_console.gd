@@ -181,6 +181,8 @@ func _open_console() -> void:
 func _close_console() -> void:
 	if not _is_open:
 		return
+	# Time scaling is a temporary test aid; never leave it behind when the overlay closes.
+	Engine.time_scale = 1.0
 	_is_open = false
 	_root.hide()
 	get_tree().paused = _was_paused_before_open
@@ -352,6 +354,7 @@ func _command_scene(args: PackedStringArray) -> void:
 
 func _change_scene(path: String) -> void:
 	_append_line("Changing scene to %s" % path)
+	Engine.time_scale = 1.0
 	# The console survives scene changes. Closing it afterwards should unpause a
 	# scene that replaced an old pause menu while the console was open.
 	_was_paused_before_open = false
