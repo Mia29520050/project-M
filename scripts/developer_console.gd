@@ -17,6 +17,13 @@ var _history: Array[String] = []
 var _history_index := -1
 
 func _ready() -> void:
+	# Keep the developer console out of release exports. Debug builds (including
+	# editor playtests) retain the existing allow-listed testing workflow.
+	if not OS.is_debug_build():
+		set_process_input(false)
+		queue_free()
+		return
+
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	layer = 100
 	_build_ui()

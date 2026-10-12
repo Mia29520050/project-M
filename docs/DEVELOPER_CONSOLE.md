@@ -1,5 +1,7 @@
 # Moonveil Developer Console
 
+**Debug builds only.** The console removes itself when running a release build. Do not export a shareable release build with debugging enabled, or the console and its test commands will remain available.
+
 Open the console from any scene with **F10** or the backtick key (`). Press **Escape** or use **Close** to return to the previous pause state. The console pauses gameplay while open, persists through scene changes, and supports Up/Down for command history.
 
 Type `help` for the current command list. Supported commands:
