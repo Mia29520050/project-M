@@ -22,6 +22,8 @@ For every item, record **PASS / FAIL / NOT RUN** and a brief note. Headless smok
 - [ ] **Defeat:** let player HP reach zero. During the defeat delay, Pause and Inventory should be ignored. Verify automatic return to Refuge, run-only stats reset, and permanent flags remain. Open and close the debug console during the defeat delay.
 - [ ] **Scene cycling:** Refuge → Shrine → Woods → defeat → Refuge, three cycles. After each transition, check Pause and one rebound action. From the title menu test Continue and the Return-to-Title confirmation.
 - [ ] **Hints:** rebind potion, skill, and Interact; inspect HUD potion status, Astra skill status, the campfire 3D prompt, and both character descriptions for stale key labels.
+- [ ] **Campfire selection context:** the floating "change hero" prompt hides while the character selector uses `E` to confirm, and returns when selection closes.
+- [ ] **Crowded enemy labels:** cluster several Voidlings; their HP labels should stagger in screen space without overlapping, then settle back as enemies spread apart.
 
 ## Combat playtest gate
 

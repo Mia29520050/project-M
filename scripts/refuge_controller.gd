@@ -895,6 +895,10 @@ func _open_campfire_selection() -> void:
 		return
 	_selection_open = true
 	selected_character_id = ""
+	# The world hint says "change hero", but E now confirms the highlighted
+	# wayfarer while this panel is open. Hide the conflicting 3D prompt.
+	if is_instance_valid(campfire_hint_label):
+		campfire_hint_label.hide()
 	if is_instance_valid(player):
 		player.controls_locked = true
 		player.visible = false
@@ -917,6 +921,8 @@ func _close_character_selection() -> void:
 		return
 	_selection_open = false
 	selected_character_id = ""
+	if is_instance_valid(campfire_hint_label):
+		campfire_hint_label.show()
 	if is_instance_valid(character_selection_panel):
 		character_selection_panel.hide()
 	if is_instance_valid(selection_hint_label):

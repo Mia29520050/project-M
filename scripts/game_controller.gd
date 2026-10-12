@@ -6,6 +6,8 @@ const ENEMY_SCENE = preload("res://scenes/enemy.tscn")
 const BOLT_SCENE = preload("res://scenes/magic_bolt.tscn")
 const PAUSE_MENU_SCENE: PackedScene = preload("res://scenes/pause_menu.tscn")
 const INVENTORY_PANEL_SCRIPT: Script = preload("res://scripts/inventory_panel.gd")
+const ENEMY_LABEL_OVERLAP_WIDTH := 86.0
+const ENEMY_LABEL_OVERLAP_HEIGHT := 10.0
 
 var player: Node3D
 var camera: Camera3D
@@ -64,11 +66,63 @@ func _process(delta: float) -> void:
 	if get_tree().paused:
 		return
 	_time += delta
+	_update_enemy_name_label_layout()
 	_refresh_dodge_hud()
 	_refresh_potion_hud()
 	if is_instance_valid(player) and player.character_id == "sword_duelist" and is_instance_valid(shard_label):
 		shard_label.text = player.call("get_skill_status_text")
 
+
+func _update_enemy_name_label_layout() -> void:
+	if not is_instance_valid(camera) or not (camera is Camera3D):
+		return
+	var active_camera := camera as Camera3D
+	var entries: Array[Dictionary] = []
+	for candidate in get_tree().get_nodes_in_group("enemies"):
+		if not is_instance_valid(candidate) or not (candidate is Node3D):
+			continue
+		var enemy := candidate as Node3D
+		var label_anchor := enemy.global_position + Vector3(0.0, 2.0, 0.0)
+		if active_camera.is_position_behind(label_anchor):
+			continue
+		entries.append({
+			"node": enemy,
+			"id": enemy.get_instance_id(),
+			"point": active_camera.unproject_position(label_anchor)
+		})
+	# Order by screen position so clustered labels stack consistently rather than
+	# depending on when enemies happened to be instantiated.
+	entries.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+		var left_point: Vector2 = left["point"]
+		var right_point: Vector2 = right["point"]
+		if not is_equal_approx(left_point.y, right_point.y):
+			return left_point.y < right_point.y
+		if not is_equal_approx(left_point.x, right_point.x):
+			return left_point.x < right_point.x
+		return int(left["id"]) < int(right["id"])
+	)
+	var placed_labels: Array[Dictionary] = []
+	for entry in entries:
+		var enemy := entry["node"] as Node3D
+		var tier := 0
+		while tier < entries.size():
+			var target_anchor := enemy.global_position + Vector3(0.0, 2.0 + float(tier) * 0.62, 0.0)
+			var target_point := active_camera.unproject_position(target_anchor)
+			var overlaps := false
+			for placed in placed_labels:
+				var placed_point: Vector2 = placed["point"]
+				if absf(target_point.x - placed_point.x) < ENEMY_LABEL_OVERLAP_WIDTH and absf(target_point.y - placed_point.y) < ENEMY_LABEL_OVERLAP_HEIGHT:
+					overlaps = true
+					break
+			if not overlaps:
+				break
+			tier += 1
+		var final_anchor := enemy.global_position + Vector3(0.0, 2.0 + float(tier) * 0.62, 0.0)
+		placed_labels.append({
+			"id": int(entry["id"]),
+			"point": active_camera.unproject_position(final_anchor)
+		})
+		enemy.call("set_name_label_stack_tier", tier)
 
 func _on_settings_changed() -> void:
 	if is_instance_valid(controls_hint_panel):
